@@ -1,0 +1,2 @@
+pkill ecsysapp -9
+
