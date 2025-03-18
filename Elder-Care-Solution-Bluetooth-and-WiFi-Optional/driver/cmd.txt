@@ -1,0 +1,35 @@
+sudo apt update
+sudo apt upgrade
+nmcli connection
+nmcli con del <UUID>
+nmcli device wifi
+nmcli device wifi connect myssid password mypass
+
+sudo nmcli con add con-name ethernet ifname eth0 type ethernet ip4 10.10.10.1/24 gw4 10.10.10.1
+sudo nmcli con mod ethernet ipv4.dns 10.10.10.1,8.8.8.8
+sudo nmcli con up ethernet ifname eth0
+nmcli connection
+
+raspi-config timezone , autologin 
+
+sudo apt install libopencv-dev mariadb-server php cmake libcamera-dev libmysqlcppconn-dev  php8.2-mysql evtest syslog-ng php8.2-gd  libasound2-dev acl libboost-dev  pulseaudio-module-bluetooth pulseaudio bluez libbluetooth-dev libpulse-dev  libsystemd-dev libfreetype-dev
+
+cd /usr/include/libcamera
+sudo cp libcamera/*.* . -r
+sudo cp libcamera/ipa/ . -r
+sudo cp libcamera/base/ . -r
+
+sudo chown  www-data:www-data -R *
+sudo setfacl -m u:ecsys:rwx data
+
+sudo mysql -u root
+create database ecsys;
+use ecsys;
+create table out_img(data BLOB,ts TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP);
+create table in_img(data BLOB,ts TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP);
+insert into out_img(data) values(LOAD_FILE('/home/seccam/backup/dbase/tv640.jpg'));
+insert into in_img(data) values(LOAD_FILE('/home/seccam/backup/dbase/tv640.jpg'));
+
+create user 'userecsys'@'localhost' identified by 'ecsys123';
+grant all on ecsys.* TO 'userecsys'@'localhost';
+
