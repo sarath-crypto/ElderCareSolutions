@@ -1,0 +1,1 @@
+g++ ecsysapp.cpp udps.o fb.o fft.o filters.o motiondetector.o scanner.o syscam.o ble.o global.o `pkg-config --cflags --libs opencv4` -llccv -lmysqlcppconn  -Wno-psabi  -ldl -lm -lpthread -lpulse-simple -lpulse -lbluetooth -lkissfft-float -latomic -Wall -g -o ecsysapp
