@@ -131,6 +131,7 @@
 			while($row = $result->fetch_assoc()){
  				$mouse_level = $row['mouse_level'];
         			$mouse_name = $row['mouse_name'];
+        			$mouse_index = $row['mouse_index'];
         			$beacon_timeout = $row['beacon_timeout'];
         			$dir_max = $row['dir_max'];
         			$camera = $row['camera'];
@@ -156,6 +157,9 @@
 			echo '"></td></tr>';
 			echo '<tr width=100%><td>MOUSE_NAME</td><td><input type="text" id="mouse_name" name="mouse_name" value="';
 			echo $mouse_name;
+			echo '"></td></tr>';
+			echo '<tr width=100%><td>MOUSE_INDEX</td><td><input type="text" id="mouse_index" name="mouse_index" value="';
+			echo $mouse_index;
 			echo '"></td></tr>';
 			echo '<tr width=100%><td>BEACON_TIMEOUT[1-255]</td><td><input type="number" id="beacon_timeout" name="beacon_timeout" value="';
 			echo $beacon_timeout;
@@ -242,31 +246,32 @@
 			}
 		}
 
-		echo 'ctx.beginPath();';
-		echo 'ctx.moveTo(0,135);';
-		echo 'ctx.lineTo(960,135);';
-		echo 'ctx.moveTo(0,270);';
-		echo 'ctx.lineTo(960,270);';
-		echo 'ctx.moveTo(0,405);';
-		echo 'ctx.lineTo(960,405);';
-		echo 'ctx.moveTo(240,0);';
-		echo 'ctx.lineTo(240,540);';
-		echo 'ctx.moveTo(480,0);';
-		echo 'ctx.lineTo(480,540);';
-		echo 'ctx.moveTo(720,0);';
-		echo 'ctx.lineTo(720,540);';
-		echo 'ctx.stroke();';
+                echo 'ctx.beginPath();';
+                echo 'ctx.moveTo(0,135);';
+                echo 'ctx.lineTo(960,135);';
+                echo 'ctx.moveTo(0,270);';
+                echo 'ctx.lineTo(960,270);';
+                echo 'ctx.moveTo(0,405);';
+                echo 'ctx.lineTo(960,405);';
+                echo 'ctx.moveTo(240,0);';
+                echo 'ctx.lineTo(240,540);';
+                echo 'ctx.moveTo(480,0);';
+                echo 'ctx.lineTo(480,540);';
+                echo 'ctx.moveTo(720,0);';
+                echo 'ctx.lineTo(720,540);';
+                echo 'ctx.stroke();';
 
-		echo 'ctx.font = "20px Arial ";';
-		echo 'ctx.fillStyle = "red";';
-		echo 'ctx.fillText("480",245,20,50);';
-		echo 'ctx.fillText("960",485,20,50);';
-		echo 'ctx.fillText("1440",725,20,50);';
+                echo 'ctx.font = "20px Arial ";';
+                echo 'ctx.fillStyle = "red";';
+                echo 'ctx.fillText("480",245,20,50);';
+                echo 'ctx.fillText("960",485,20,50);';
+                echo 'ctx.fillText("1440",725,20,50);';
 
-		echo 'ctx.fillText("270",5,130,50);';
-		echo 'ctx.fillText("540",5,260,50);';
-		echo 'ctx.fillText("810",5,390,50);';
-                echo '</script>';
+                echo 'ctx.fillText("270",5,130,50);';
+                echo 'ctx.fillText("540",5,260,50);';
+                echo 'ctx.fillText("810",5,390,50);';
+		
+		echo '</script>';
 		$conn->close();
 	}
 ?>

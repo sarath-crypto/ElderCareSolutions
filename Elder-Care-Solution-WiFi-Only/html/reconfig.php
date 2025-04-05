@@ -12,6 +12,7 @@
 
 	$mouse_level = 0;
 	$mouse_name = 0;
+	$mouse_index = 0;
 	$beacon_timeout = 0;
 	$dir_max = 0;
 	$camera = 0;
@@ -36,6 +37,7 @@
         if ($_SERVER["REQUEST_METHOD"] == "POST") {
 		$mouse_level = htmlspecialchars($_POST['mouse_level']);
 		$mouse_name = htmlspecialchars($_POST['mouse_name']);
+		$mouse_index = htmlspecialchars($_POST['mouse_index']);
 		$beacon_timeout = htmlspecialchars($_POST['beacon_timeout']);
 		$dir_max = htmlspecialchars($_POST['dir_max']);
 		$camera = htmlspecialchars($_POST['camera']);
@@ -66,6 +68,7 @@
 			$sql = "UPDATE cfg SET ";
 			if($mouse_level >= 0)$sql = $sql."mouse_level=".$mouse_level.",";	
 			if($mouse_name)$sql = $sql."mouse_name='".$mouse_name."',";	
+			if($mouse_index)$sql = $sql."mouse_index='".$mouse_index."',";	
 			if($beacon_timeout >= 0)$sql = $sql."beacon_timeout=".$beacon_timeout.",";	
 			if($dir_max >= 0)$sql = $sql."dir_max=".$dir_max.",";	
 			if($camera)$sql = $sql."camera='".$camera."',";	
