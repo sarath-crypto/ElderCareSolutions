@@ -159,6 +159,7 @@ void access_dbase(string &cmd,ipc *ip,unsigned char type){
 	string token = cmd;
       	if(!cmd.compare("mouse_level"))cmd = "select mouse_level from cfg";
 	else if(!cmd.compare("mouse_name"))cmd = "select mouse_name from cfg";
+	else if(!cmd.compare("mouse_index"))cmd = "select mouse_index from cfg";
 	else if(!cmd.compare("beacon_timeout"))cmd = "select beacon_timeout from cfg";
 	else if(!cmd.compare("dir_max"))cmd = "select dir_max from cfg";
 	else if(!cmd.compare("camera"))cmd = "select camera from cfg";
@@ -301,10 +302,11 @@ bool load_config(ipc *ip){
 			access_dbase(cmd,ip,DBNONE);
 		}
 	}
+
 	cmd = "select count(*) from cfg";
 	access_dbase(cmd,ip,DBINT);
 	if(!stoi(cmd)){
-		cmd = "insert into cfg (mouse_level, mouse_name, beacon_timeout,dir_max,camera,micro,voice_threshold,voice_start,voice_duration,sec,access,res_reboot) values(0,'DEAFULT',15,2,'DEFAULT','DEFAULT',100,0,0,'seckey','admin',70)";
+		cmd = "insert into cfg (mouse_level,mouse_name,mouse_index,beacon_timeout,dir_max,camera,micro,voice_threshold,voice_start,voice_duration,sec,access,res_reboot) values(0,'DEAFULT',0,15,2,'DEFAULT','DEFAULT',100,0,0,'seckey','admin',70)";
 		access_dbase(cmd,ip,DBNONE);
 	}
 	cmd = "select count(*) from nbuf";
@@ -476,6 +478,7 @@ void *dbproc(void *p){
 				prev_ts = f.ts;
 				f.wr = false;
 			}
+
                         if(f.wr){
                                 map<unsigned int,string>sname;
                                 for (const auto & p : fs::directory_iterator(FILE_WRITE)){
@@ -772,16 +775,18 @@ int main(void){
      	ip.fd = -1; 
 	bool mouse = false;
 
+	cmd = "mouse_index";
+	access_dbase(cmd,&ip,DBINT);
+	unsigned char mi = stoi(cmd);
 	cmd = "mouse_name";
 	access_dbase(cmd,&ip,DBSTRING);
-
         for(int  i = 0;i <= MAX_MOUSE_IDX;i++){
 		string fn =  string(MOUSE_PATH) + to_string(i);	
 		ip.fd = open(fn.c_str(), O_RDONLY | O_NONBLOCK);
         	if (ip.fd == -1)continue;
         	ioctl(ip.fd, EVIOCGNAME(sizeof(name)),name);
 		string mname(name);
-		if(!mname.compare(cmd)){
+		if(!mname.compare(cmd) && (mi == i)){
        			syslog (LOG_INFO,"ecsysapp mouse found: %s",cmd.c_str());
 			mouse = true;
 			break;
