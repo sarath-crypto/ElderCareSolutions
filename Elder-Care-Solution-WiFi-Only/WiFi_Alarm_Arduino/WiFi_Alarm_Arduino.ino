@@ -4,6 +4,7 @@
 #include <WiFiUdp.h>
 #include <ESPAsyncTCP.h>
 #include <ESPAsyncWebServer.h>
+#include <Ticker.h>
 
 #include "AudioFileSourceSPIFFS.h"
 #include "AudioFileSourceID3.h"
@@ -14,15 +15,15 @@
 #define  HEADER_LEN     2
 #define  BUF_LEN        1452
 
-#define KALV_TIMEOUT    60000
-#define WDTM_TIMEOUT    20000
-#define WAIT_TIMEOUT    100
-
-#define STA_RETRY       16
+#define KALV_TO         60000
+#define WDTM_TO         20000
+#define WAIT_TO         100
+#define RESET_TO        5
+#define STA_RETRY       8
 #define PORT            8880
 
-#define LED_KALV        5
-#define LED_ALRM        4
+#define GPIO_LED_KALV        5
+#define GPIO_LED_ALRM        4
 
 #define AP_SSID         "ECSYS_AP"
 #define AP_PASS         "ECSYS_PASS"
@@ -35,15 +36,7 @@ typedef struct pdu {
   unsigned char   len;
   unsigned char   data[PDU_MTU];
 } pdu;
-
 enum pdu_type {KAL = 1, ALM};
-
-char gwip[16];
-unsigned char ipi = 0;
-
-String ssid;
-String pass;
-String key;
 
 const char* PARAM_INPUT_1 = "input1";
 const char* PARAM_INPUT_2 = "input2";
@@ -55,14 +48,30 @@ const char s3[] PROGMEM = {"\"><br><br>____________KEY:<input type=\"text\" name
 const char s4[] PROGMEM = {"\"><input type=\"submit\" value=\"Reboot\"></form></body></html>"};
 String index_html;
 
-void (*reset)(void) = 0;
-
-WiFiUDP Udp;
+String ip;
+String ssid;
+String pass;
+String key;
+unsigned char ipi = 0;
 
 char trx[BUF_LEN ];
 bool pdu_rdy = false;
 bool scan = false;
-unsigned long msec = 0;
+bool ledb = false;
+unsigned char sys_rst = 0;
+unsigned long kalv_to = 0;
+char kalv_pattern[] = {1, 0, 1, 0, 0, 0, 0, 0, 0, 0};
+unsigned char kalvp = 0;
+void (*reset)(void) = 0;
+
+WiFiUDP Udp;
+Ticker ticks;
+
+void ka_ticks() {
+  digitalWrite(GPIO_LED_KALV, kalv_pattern[kalvp]);
+  if (kalvp < 10)kalvp++;
+  else kalvp = 0;
+}
 
 void play_ring(void) {
   AudioFileSourceSPIFFS   *in = new AudioFileSourceSPIFFS("/ring.mp3");
@@ -105,11 +114,10 @@ void setup() {
 #ifdef  DEBUG
   Serial.begin(115200);
 #endif
-  pinMode(LED_KALV, OUTPUT);
-  pinMode(LED_ALRM, OUTPUT);
-  digitalWrite(LED_KALV, HIGH);
-  digitalWrite(LED_ALRM, HIGH);
-
+  pinMode(GPIO_LED_KALV, OUTPUT);
+  pinMode(GPIO_LED_ALRM, OUTPUT);
+  digitalWrite(GPIO_LED_KALV, HIGH);
+  digitalWrite(GPIO_LED_ALRM, HIGH);
   SPIFFS.begin();
   delay(1000);
 
@@ -126,7 +134,7 @@ void setup() {
     if (fn == "/ring.mp3")p++;
     if (fn == "/config.txt")p++;
 #ifdef  DEBUG
-    Serial.printf("Files %s %d\n", fn.c_str(), p);
+    Serial.printf("\nFiles %s %d", fn.c_str(), p);
 #endif
   }
   if (p != 2)reset();
@@ -147,7 +155,7 @@ void setup() {
   key = get_value(line, "key");
 
 #ifdef  DEBUG
-  Serial.printf("config: %s %s %s\n", ssid.c_str(), pass.c_str(), key.c_str());
+  Serial.printf("\nconfig: %s %s %s\n", ssid.c_str(), pass.c_str(), key.c_str());
 #endif
 
   WiFi.mode(WIFI_STA);
@@ -157,16 +165,18 @@ void setup() {
 #ifdef  DEBUG
     Serial.printf("Connecting to AP %s %s %d %d\n", ssid.c_str(), pass.c_str(), WiFi.status(), retry);
 #endif
-    digitalWrite(LED_KALV, HIGH);
-    digitalWrite(LED_ALRM, HIGH);
-    delay(500);
-    digitalWrite(LED_KALV, LOW);
-    digitalWrite(LED_ALRM, LOW);
-    delay(500);
+    digitalWrite(GPIO_LED_KALV, HIGH);
+    digitalWrite(GPIO_LED_ALRM, HIGH);
+    delay(250);
+    digitalWrite(GPIO_LED_KALV, LOW);
+    digitalWrite(GPIO_LED_ALRM, LOW);
+    delay(250);
     retry++;
-    if (retry > STA_RETRY) break;
+    if (retry >= STA_RETRY) break;
   }
-  if (retry > STA_RETRY) {
+  digitalWrite(GPIO_LED_KALV, LOW);
+  digitalWrite(GPIO_LED_ALRM, LOW);
+  if (retry >= STA_RETRY) {
     IPAddress apip(10, 10, 10, 1);
     WiFi.mode(WIFI_AP_STA);
     WiFi.softAPConfig(apip, apip, IPAddress(255, 255, 255, 0));
@@ -199,33 +209,34 @@ void setup() {
       fout.println(pass.c_str());
       fout.println(key.c_str());
       fout.close();
-      reset();
+      request->redirect("http://10.10.10.1");
+      sys_rst = 1;
     });
     server.onNotFound(notFound);
     server.begin();
 
-    while (1) {
-      digitalWrite(LED_KALV, HIGH);
-      digitalWrite(LED_ALRM, LOW);
+    while (sys_rst < RESET_TO) {
+      digitalWrite(GPIO_LED_KALV, HIGH);
+      digitalWrite(GPIO_LED_ALRM, LOW);
       delay(500);
-      digitalWrite(LED_KALV, LOW);
-      digitalWrite(LED_ALRM, HIGH);
+      digitalWrite(GPIO_LED_KALV, LOW);
+      digitalWrite(GPIO_LED_ALRM, HIGH);
       delay(500);
 #ifdef  DEBUG
-      Serial.printf("Webserver waiting\n");
+      Serial.printf("AP mode webserver waiting %d\n", sys_rst);
 #endif
+      if (sys_rst)sys_rst++;
     }
+    reset();
   } else {
-    memcpy(gwip, WiFi.gatewayIP().toString().c_str(), WiFi.gatewayIP().toString().length());
-    gwip[WiFi.gatewayIP().toString().length()] = '\0';
+    ip = WiFi.gatewayIP().toString();
 #ifdef  DEBUG
-    Serial.printf("AP GW IP %s MyIP %s %ddbm\n", gwip, WiFi.localIP().toString().c_str(), WiFi.RSSI());
+    Serial.printf("AP GW IP %s MyIP %s %ddbm\n", ip.c_str(), WiFi.localIP().toString().c_str(), WiFi.RSSI());
 #endif
     Udp.begin((int)PORT);
     ESP.wdtDisable();
-    ESP.wdtEnable(WDTM_TIMEOUT);
+    ESP.wdtEnable(WDTM_TO);
     ESP.wdtFeed();
-    msec = millis();
     scan  = true;
   }
 }
@@ -233,30 +244,28 @@ void setup() {
 void loop()
 {
   unsigned long wait = millis();
-  while ((millis() - wait) < WAIT_TIMEOUT);
+  while ((millis() - wait) < WAIT_TO);
   ESP.wdtFeed();
-  if ((millis() - msec) > KALV_TIMEOUT) {
-#ifdef  DEBUG
-    Serial.printf("Reseting %d %d\n", (millis() - msec), KALV_TIMEOUT);
-#endif
-    reset();
+  if (((millis() - kalv_to) > KALV_TO) && ledb) {
+    digitalWrite(GPIO_LED_ALRM, LOW);
+    ledb = false;
+    scan  = true;
+    ticks.detach();
   }
-  pdu p;
 
+  pdu p;
   if (scan) {
+    digitalWrite(GPIO_LED_ALRM, !digitalRead(GPIO_LED_ALRM));
     p.type = KAL;
     memcpy(p.data, key.c_str(), key.length());
     p.len = HEADER_LEN + key.length();
 
-    String ips(gwip);
-    int i = ips.lastIndexOf('.');
-    ips = ips.substring(0, i + 1) + String(ipi);
+    int i = ip.lastIndexOf('.');
+    ip = ip.substring(0, i + 1) + String(ipi);
     ipi++;
-    memcpy(gwip, ips.c_str(), ips.length());
-    gwip[ips.length()] = '\0';
     pdu_rdy = true;
 #ifdef  DEBUG
-    Serial.printf("Scanning IP %s Key %s\n", gwip, key.c_str());
+    Serial.printf("Scanning IP %s Key %s\n", ip.c_str(), key.c_str());
 #endif
   }
 
@@ -268,29 +277,30 @@ void loop()
     memcpy(buf, prx->data, prx->len - HEADER_LEN);
     buf[prx->len - HEADER_LEN] = '\0';
     String msg = String(buf);
-    String rip = Udp.remoteIP().toString();
+    ip = Udp.remoteIP().toString();
 #ifdef  DEBUG
-    Serial.printf("RX %s type %d %d %s\n", rip.c_str(), (int)prx->type, (int)prx->len, msg.c_str());
+    Serial.printf("RX %s type %d %d %s\n", ip.c_str(), (int)prx->type, (int)prx->len, msg.c_str());
 #endif
     if (msg == key) {
+      kalv_to = millis();
+      if (!ledb) {
+        digitalWrite(GPIO_LED_ALRM, LOW);
+        ledb = true;
+        ticks.attach(0.1, ka_ticks);
+      }
       if (prx->type == KAL) {
-        msec = millis();
         scan = false;
-        memset(gwip, 0, sizeof(gwip));
-        memcpy(gwip, rip.c_str(), rip.length());
 #ifdef  DEBUG
-        Serial.printf("KAL SERVER IP %s %s %d %d\n", gwip, msg.c_str(), (millis() - msec), KALV_TIMEOUT);
+        Serial.printf("KAL SERVER IP %s %s\n", ip.c_str(), msg.c_str());
 #endif
         p.type = KAL;
         memcpy(p.data, key.c_str(), key.length());
         p.len = HEADER_LEN + key.length();
         pdu_rdy = true;
-        digitalWrite(LED_KALV, digitalRead(LED_KALV) ^ 1);
       } else if (prx->type == ALM) {
-        msec = millis();
-        digitalWrite(LED_ALRM, HIGH);
+        digitalWrite(GPIO_LED_ALRM, HIGH);
         play_ring();
-        digitalWrite(LED_ALRM, LOW);
+        digitalWrite(GPIO_LED_ALRM, LOW);
       }
     }
     Udp.flush();
@@ -303,9 +313,9 @@ void loop()
     memcpy(buf, p.data, p.len - HEADER_LEN);
     buf[p.len - HEADER_LEN] = '\0';
     String msg = String(buf);
-    Serial.printf("TX type[%d] ip[%s] port[%d] len[%d] msg[%s] TO %d\n", (int)p.type, gwip, PORT, p.len, msg.c_str(), millis() - msec);
+    Serial.printf("TX type[%d] ip[%s] port[%d] len[%d] msg[%s]\n", (int)p.type, ip.c_str(), PORT, p.len, msg.c_str());
 #endif
-    Udp.beginPacket(gwip, PORT);
+    Udp.beginPacket(ip.c_str(), PORT);
     Udp.write((char *)&p, p.len);
     Udp.endPacket();
     memset((void *)&p, 0, sizeof(pdu));
