@@ -163,6 +163,7 @@ void frame_buffer::bled_brightness(unsigned char val){
 	if(!ofs.is_open())syslog(LOG_INFO,"ecsysapp failed to modify brightness file");
 	if(val > 100)val = 100;
 	ofs <<(int)val;
+	cbled = val;
     	ofs.close();
 }
 
@@ -192,7 +193,7 @@ void frame_buffer::drawscreen(void){
 				blank = false;
 			}
 		}
-	}else if(blank){
+	}else if(blank || (cbled != 100)){
 		blank = false;
 		bled_brightness(100);
 	}

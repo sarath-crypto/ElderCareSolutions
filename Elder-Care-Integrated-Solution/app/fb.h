@@ -53,7 +53,7 @@ private:
 	void getuptime(uptme *);
 	unsigned char get_resources(void);
 	void bled_brightness(unsigned char);
-	unsigned char chng;
+	unsigned char cbled;
 	unsigned char tp;
 	unsigned char fps;
 	unsigned long ts;
