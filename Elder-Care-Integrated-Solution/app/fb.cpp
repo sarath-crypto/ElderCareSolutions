@@ -174,7 +174,7 @@ void frame_buffer::drawscreen(void){
 	if(pipc->boot || pipc->alrm || !pipc->wifi)scr_state = false;
 	else scr_state = true;
 
-	if(((stoi(ct.substr(0, 2)) >= 20) && (stoi(ct.substr(0, 2)) <= 23)) || (stoi(ct.substr(0, 2)) <= 6)){
+	if(((stoi(ct.substr(0, 2)) >= 19) && (stoi(ct.substr(0, 2)) <= 23)) || (stoi(ct.substr(0, 2)) <= 6)){
 		if(scr_state){
 			if(prev_state != scr_state){
 				prev_state = scr_state;
@@ -189,10 +189,14 @@ void frame_buffer::drawscreen(void){
 			if(prev_state != scr_state){
 				prev_state = scr_state;
 				bled_brightness(100);
+				blank = false;
 			}
-			blank = false;
 		}
-	}	
+	}else if(blank){
+		blank = false;
+		bled_brightness(100);
+	}
+
 	frame = Mat(SCREEN_W,SCREEN_H,CV_8UC4,Scalar(0,0,0));
 	rectangle(frame,Point(10,10),Point(1270,790),Scalar(255,255,0),2,LINE_AA);
         getuptime(&ut);
