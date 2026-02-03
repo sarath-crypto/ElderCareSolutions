@@ -24,7 +24,7 @@
 
 #define BUFSIZE		512
 #define ALARM_PDU_SZ	11
-#define CON_TH		2
+#define CON_TH		4
 //#define	DEBUG		1
 
 using namespace std;

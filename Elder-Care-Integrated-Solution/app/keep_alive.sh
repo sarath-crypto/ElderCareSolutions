@@ -5,7 +5,7 @@ while true
 do 
 	cmd=$(pgrep ecsysapp)
 	if [ -z "$cmd" ]; then
-		/home/ecsys/app/ecsysapp
+		home/ecsys/app/ecsysapp
 		echo 0 > /sys/class/graphics/fbcon/cursor_blink
 		ts=$(date)
 		echo "$ts ecsysapp application started" >> /home/ecsys/app/log.txt

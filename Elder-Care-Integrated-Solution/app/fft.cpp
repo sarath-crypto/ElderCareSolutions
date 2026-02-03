@@ -98,7 +98,6 @@ void fft::process(bool flsh){
 	}	
 
 	if ((error = snd_pcm_readi(capture_handle, buf, FFT_SZ)) != FFT_SZ){
-        	syslog(LOG_INFO,"fft read from audio interface failed %s %d",snd_strerror(error),error);
 		if (error == -32){
 			if ((error = snd_pcm_prepare(capture_handle)) < 0){
         			syslog(LOG_INFO,"fft cannot prepare audio interface for use %s %d",snd_strerror(error),error);

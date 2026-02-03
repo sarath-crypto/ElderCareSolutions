@@ -1,1 +1,1 @@
-g++ ecsysapp.cpp udps.o fb.o fft.o filters.o motiondetector.o scanner.o syscam.o global.o `pkg-config --cflags --libs opencv4` -lmysqlcppconn -Wno-psabi  -ldl -lm -lpthread -lkissfft-float -lasound -latomic -Wall -g -o ecsysapp
+g++ ecsysapp.cpp udps.o fb.o fft.o filters.o motiondetector.o scanner.o syscam.o global.o `pkg-config --cflags --libs opencv4` -lmysqlcppconn -Wno-psabi  -ldl -lm -lpthread -lkissfft-float -lasound -latomic -Wall -o ecsysapp

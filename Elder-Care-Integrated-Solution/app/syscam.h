@@ -1,3 +1,6 @@
+#ifndef _SYSCAM_H
+#define _SYSCAM_H
+
 #include <iostream>
 #include <string>
 #include <opencv2/opencv.hpp>
@@ -20,3 +23,5 @@ class syscam{
 		~syscam();
 		bool get_frame(Mat &);
 };
+
+#endif

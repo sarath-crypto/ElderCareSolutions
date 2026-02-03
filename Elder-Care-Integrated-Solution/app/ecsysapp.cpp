@@ -43,12 +43,11 @@
 #include <regex>
 #include <alsa/asoundlib.h>
 #include <chrono>
+#include <condition_variable>
+#include <thread>
 #include <cstdint>
 #include <string>     
 #include <cstddef> 
-#include <stdio.h>
-#include <stdlib.h>
-#include <iostream>
 
 #include <cppconn/driver.h>
 #include <cppconn/exception.h>
@@ -64,7 +63,6 @@
 #include "udps.h"
 
 #define JPEG_QUALITY	50
-#define FPS_DURATION	400
 #define RING_DURATION	14
 #define PING_TH		20
 #define DAY_SEC		86400
@@ -89,6 +87,9 @@ bool exit_netproc = false;
 bool exit_displayproc = false;
 
 mutex mx;
+mutex cov_mx; 
+condition_variable cov;
+int cov_v = 0;
 
 enum	wav_type{BLIP = 1,BEEP,RING};
 enum	file_type{JPG = 1,TMR,TRG};
@@ -96,24 +97,24 @@ enum 	dbtype{DBNONE = 1,DBINT,DBSTRING};
 
 ipc *pipc = NULL;
 
+void  sighandler(int num){
+        syslog(LOG_INFO,"sighandler is exiting %d",num);
+#ifdef DEBUG
+	cout << "sighandler " << num << endl;
+#endif
+	string cmd = "sudo reboot";
+	execute(cmd);
+	exit_netproc = true;
+	exit_displayproc = true;
+	exit_dbproc = true;
+        exit_main = true;
+}
+
 void sort(map<unsigned int,string>& M){
         multimap<string,unsigned int> MM;
         for (auto& it : M) {
                 MM.insert({ it.second, it.first });
         }
-}
-
-void  sighandler(int num){
-        syslog(LOG_INFO,"ecsysapp sighandler is exiting %d",num);
-#ifdef DEBUG
-	cout << "sighandler " << num << endl;
-#endif
-	exit_netproc = true;
-	exit_displayproc = true;
-	exit_dbproc = true;
-        exit_main = true;
-	string cmd = "sudo reboot";
-	execute(cmd);
 }
 
 void file_write(char *pdata,unsigned long len,char type){
@@ -158,6 +159,7 @@ void access_dbase(string &cmd,unsigned char type){
 	else if(!cmd.compare("access"))cmd = "select access from cfg";
 	else if(!cmd.compare("night"))cmd = "select night from cfg";
 	else if(!cmd.compare("res_reboot"))cmd = "select res_reboot from cfg";
+	else if(!cmd.compare("photo"))cmd = "select photo from cfg";
 	else if(!cmd.compare("maskx")){
 		cmd = "select x from mask";
 		token = "x";
@@ -254,11 +256,10 @@ bool load_config(void){
                 }
         }
 
-
 	cmd = "select count(*) from cfg";
 	access_dbase(cmd,DBINT);
 	if(!stoi(cmd)){
-		cmd = "insert into cfg (mouse_level,mouse_name,mouse_index,beacon_timeout,dir_max,camera,micro,voice_threshold,voice_start,voice_duration,sec,aip,sip,access,night,res_reboot) values(0,'DEAFULT',0,15,2,'DEFAULT','DEFAULT',95,0,0,'seckey','10.10.10.1','10.10.10.2','admin',0,70)";
+		cmd = "insert into cfg (mouse_level,mouse_name,mouse_index,beacon_timeout,dir_max,camera,micro,voice_threshold,voice_start,voice_duration,sec,aip,sip,access,night,res_reboot,photo) values(0,'DEAFULT',0,15,14,'DEFAULT','DEFAULT',95,22,0,'ecsys_key','10.10.10.1','10.10.10.2','admin',0,70,'no')";
 		access_dbase(cmd,DBNONE);
 	}
 	return true;
@@ -281,11 +282,16 @@ bool trigger_level(unsigned char mlvl,unsigned short code){
 	return false;
 }
 
-
 void *dbproc(void *){
 	struct input_event ev;
         fd_set readfds;
-	string cmd = "mouse_level";
+	bool photo = false;
+	
+	string cmd = "photo";
+        access_dbase(cmd,DBSTRING);
+        if(!cmd.compare("yes"))photo = true;
+
+	cmd = "mouse_level";
 	access_dbase(cmd,DBINT);
 	unsigned char mlvl = stoi(cmd);
 	cmd = "dir_max";
@@ -303,25 +309,56 @@ void *dbproc(void *){
         cmd = "tsin";
 	access_dbase(cmd,DBSTRING);
 	string prev_tsd = cmd;
-	unsigned long long prev_ts = 0;
 
-        syslog(LOG_INFO,"ecsysapp started dbproc");
+	vector <int> x,y,w,h;
+	cmd = "maskx";
+       	access_dbase(cmd,DBSTRING);
+	stringstream ss(cmd.c_str());
+	string sp;
+	while(getline(ss,sp,' '))x.push_back(stoi(sp));
+	cmd = "masky";
+       	access_dbase(cmd,DBSTRING);
+	ss = stringstream(cmd.c_str());
+	sp.clear();
+	while(getline(ss,sp,' '))y.push_back(stoi(sp));
+	cmd = "maskw";
+       	access_dbase(cmd,DBSTRING);
+	ss = stringstream(cmd.c_str());
+	sp.clear();
+	while(getline(ss,sp,' '))w.push_back(stoi(sp));
+	cmd = "maskh";
+       	access_dbase(cmd,DBSTRING);
+	ss = stringstream(cmd.c_str());
+	sp.clear();
+	while(getline(ss,sp,' '))h.push_back(stoi(sp));
+
+	Mat fmask = Mat::zeros(FRAME_H,FRAME_W,CV_8UC1);
+	for(unsigned int i = 0;i < h.size();i++)fmask(Rect(x[i],y[i],w[i],h[i])) = 255;
+	bitwise_not(fmask,fmask);
+
+	MotionDetector detector(1,0.2,20,0.1,5,10,2);
+	unsigned char ferror = 0;
+
+	Mat frame;
+	Mat dframe;
+        std::list<cv::Rect2d>boxes;
+	vector<Mat>ch(3);
+
+        syslog(LOG_INFO,"started dbproc");
         while(!exit_dbproc){
-        	pthread_setschedprio(pthread_self(),254);
-   	
 		FD_ZERO(&readfds);
                 FD_SET(pipc->fd,&readfds);
                 int ev_size = sizeof(struct input_event);
 
                 int ret = select(pipc->fd + 1, &readfds, NULL, NULL, &tv);
                 if(ret == -1){
-                        syslog(LOG_INFO,"ecsysapp dbproc mouse select failed");
+                        syslog(LOG_INFO,"dbproc mouse select failed");
                         close(pipc->fd);
 			sighandler(0);
                 }else if(read(pipc->fd, &ev, ev_size) >= ev_size){
 		       	if((ev.type == 2) || (ev.type == 1)){
 				if(trigger_level(mlvl,ev.code) && !pipc->alrm){
-					syslog(LOG_INFO,"ecsysapp dbproc mouse trigger");
+					syslog(LOG_INFO,"dbproc mouse trigger");
 					file_write(NULL,0,TRG);
 					pipc->alrm = true;
 				}
@@ -348,22 +385,41 @@ void *dbproc(void *){
 			delete stmt;
 			delete res;
 		}
-		
-		if(pipc->vq.size() >= 2){
-			mx.lock();
-                        vframe vp = pipc->vq[0];
-                        pipc->vq.erase(pipc->vq.begin());
-			mx.unlock();
-		
-			Mat frame(480,640,CV_8UC3,vp.vpix.data());
+
+		if(!pipc->pcam->get_frame(frame)){
+			ferror++;
+			if(ferror >= MAX_FERR){
+				syslog(LOG_INFO,"ferror camera failed");
+				sighandler(6);
+			}
+			continue;	
+		}else{
+			ferror = 0;
+			frame.copyTo(dframe);
+			split(dframe,ch);
+			bitwise_and(ch[0],fmask,ch[0]);
+			bitwise_and(ch[1],fmask,ch[1]);
+			bitwise_and(ch[2],fmask,ch[2]);
+			merge(ch,dframe);
+			ch.clear();
+			boxes = detector.detect(dframe);
+			dframe.release();
+			if(boxes.size())for(auto i = boxes.begin(); i != boxes.end(); ++i)rectangle(frame,*i,Scalar(0,69,255),4,LINE_AA); 
+			resize(frame,frame,Size(640,420),INTER_LINEAR);
+
+			if(!photo){
+				mx.lock();
+				pipc->vq.push_back(frame);
+				mx.unlock();
+			}
+
 			time_t t;
 			struct tm *ptm;
 			time(&t);
 			ptm = localtime(&t);
 			char ts[16];
-			strftime(ts,16,"%H%M%S",ptm);
+			strftime(ts,16,"%H%M%S[",ptm);
 			string header(ts);
-			header += "@"+to_string(pipc->put->d)+":"+to_string(pipc->put->h)+":"+to_string(pipc->put->m)+"[";
 			if(pipc->wifi)header += "Alarm Connected";
 			else header += "Alarm Disconnected";
 			header += "]";	
@@ -373,19 +429,12 @@ void *dbproc(void *){
 			vector<unsigned char>buf;
 			vector<int>param(2);
 			param[0] = IMWRITE_JPEG_QUALITY;
-			do{
-				buf.clear();
-				param[1] = q;
-				imencode(".jpg",frame,buf,param);
-				q--;
-			}while(buf.size() > FRAME_SZ);
-			frame.release();
-	
-			if((vp.ts-prev_ts) <= FPS_DURATION){
-				prev_ts = vp.ts;
-				vp.wr = false;
-			}
-                        if(vp.wr){
+			buf.clear();
+			param[1] = q;
+			imencode(".jpg",frame,buf,param);
+
+                        if(boxes.size()){
+				boxes.clear();
                                 map<unsigned int,string>sname;
                                 for (const auto & p : fs::directory_iterator(FILE_WRITE)){
                                         struct stat attrib;
@@ -403,7 +452,6 @@ void *dbproc(void *){
 				file_write((char *)buf.data(),buf.size(),JPG);
 #endif
 			}
-
 			sql::PreparedStatement *prep_stmt = pipc->pcon->prepareStatement("update out_img set data=?");
                         struct membuf : std::streambuf {
                                 membuf(char* base, std::size_t n) {
@@ -415,11 +463,22 @@ void *dbproc(void *){
                         prep_stmt->setBlob(1,&blob);
                         prep_stmt->executeUpdate();
                         delete prep_stmt;
+
+		
                 }
       		pipc->db_state = true;
+
+		cov_v = 0;
+		unique_lock<std::mutex> lock(cov_mx);
+    		cov.wait(lock, []{ return cov_v == 1; });
+#ifdef DEBUG
+        	cout << "dbproc tick " << endl;
+#endif
+
         }
         close(pipc->fd);
-        syslog(LOG_INFO,"ecsysapp dbproc stopped");
+	delete pipc->pcam;
+        syslog(LOG_INFO,"dbproc stopped");
         return NULL;
 }
 
@@ -443,17 +502,15 @@ void *netproc(void *){
 	stringstream ss;
 
 	udps *pc = new udps(aip,sip);
-	if(!pc->state)syslog(LOG_INFO,"ecsysapp netproc network failed");
+	if(!pc->state)syslog(LOG_INFO,"netproc network failed");
 	cmd = "res_reboot";
 	access_dbase(cmd,DBINT);
 	unsigned char res_reboot = stoi(cmd);
 	cmd = "sec";
 	access_dbase(cmd,DBSTRING);
 	pc->key = cmd;
-	
-	syslog(LOG_INFO,"ecsysapp started netproc");
+	syslog(LOG_INFO,"started netproc");
 	while(!exit_netproc){
-        	pthread_setschedprio(pthread_self(),253);
 		e = time(NULL);
 		pc->receive();
 		pc->process();
@@ -482,7 +539,7 @@ void *netproc(void *){
 			
 		if(pipc->rm > res_reboot){
 			pipc->boot = 1;
-			syslog(LOG_INFO,"ecsysapp displayproc degradation detected rebooting the system %d",pipc->rm);
+			syslog(LOG_INFO,"displayproc degradation detected rebooting the system %d",pipc->rm);
 		}
 		if(pipc->boot == 2)sighandler(7);
 			
@@ -503,9 +560,17 @@ void *netproc(void *){
 			while(read(pipc->fd, &ev, ev_size) > 0);
 		}
       		pipc->nw_state = true;
+		
+		cov_v = 0;
+		unique_lock<std::mutex> lock(cov_mx);
+    		cov.wait(lock, []{ return cov_v == 1; });
+#ifdef DEBUG
+        	cout << "netproc tick " << endl;
+#endif
+
         }
  	if(pc)delete pc;
-        syslog(LOG_INFO,"ecsysapp netproc stopped");
+        syslog(LOG_INFO,"netproc stopped");
         return NULL;
 }
 
@@ -517,7 +582,7 @@ void *displayproc(void *){
 	
 	fft afft(pipc->audio_in,cth);
 	if(!afft.en){
-        	syslog(LOG_INFO,"ecsysapp displayproc failed on fft");
+        	syslog(LOG_INFO,"displayproc failed on fft");
 		sighandler(4);
 	}
 
@@ -544,16 +609,18 @@ void *displayproc(void *){
 	access_dbase(cmd,DBINT);
 	pipc->bled = stoi(cmd);
 
-	frame_buffer fb;
+	cmd = "photo";
+        access_dbase(cmd,DBSTRING);
+	unsigned char photo = PHOTO_NO;
+        if(!cmd.compare("yes"))photo = PHOTO_INIT;
+	frame_buffer fb(photo);
 	if(fb.en == false){
-		syslog(LOG_INFO,"ecsysapp frame buffer failed");
+		syslog(LOG_INFO,"frame buffer failed");
 		sighandler(5);
 	}
-	pipc->put = &fb.ut;
-        syslog(LOG_INFO,"ecsysapp started displayproc");
 
+        syslog(LOG_INFO,"started displayproc");
         while(!exit_displayproc){
-		pthread_setschedprio(pthread_self(),255);
 		afft.process(pipc->alrm);
 		if(dur){
 			string ts;
@@ -568,7 +635,7 @@ void *displayproc(void *){
 				}else pipc->voice = false;
 			}
 			if(afft.voice && pipc->voice && !pipc->alrm){
-				syslog(LOG_INFO,"ecsysapp displayproc voice trigger");
+				syslog(LOG_INFO,"displayproc voice trigger");
 				pipc->alrm = true;
 				afft.voice = false;
 			}
@@ -579,8 +646,16 @@ void *displayproc(void *){
 		}else fb.drawscreen();
 		pipc->rm = fb.rm;
 		pipc->ds_state = true;
+		
+		cov_v = 0;
+		unique_lock<std::mutex> lock(cov_mx);
+    		cov.wait(lock, []{ return cov_v == 1; });
+#ifdef DEBUG
+        	cout << "displayproc tick " << endl;
+#endif
+
         }
-        syslog(LOG_INFO,"ecsysapp displayproc stopped");
+        syslog(LOG_INFO,"displayproc stopped");
         return NULL;
 }
 
@@ -614,8 +689,8 @@ int main(void){
         if(sid < 0)exit(1);
 #endif
         signal(SIGINT,sighandler);
-        openlog("ecsysapp",LOG_CONS | LOG_PID | LOG_NDELAY, LOG_USER);
-        syslog (LOG_NOTICE, "ecsysapp started with uid %d", getuid ());
+        openlog("",LOG_CONS | LOG_PID | LOG_NDELAY, LOG_USER);
+        syslog (LOG_NOTICE, "started with uid %d", getuid ());
 
 #ifndef DEBUG
         close(STDIN_FILENO);
@@ -623,19 +698,18 @@ int main(void){
         close(STDERR_FILENO);
 #endif
 
-	string cmd;
 	ip.wifi = false;
 	ip.alrm = false;
 	ip.db_state = false;
 	ip.ds_state = false;
 	ip.nw_state = false;
-	ip.put = NULL;
 	ip.fd = -1;
 	ip.alm_sync = false;
 	ip.audio_in = -1;
-
-        char name[256] = "Unknown";
      	ip.fd = -1; 
+
+	string cmd;
+        char name[256] = "Unknown";
 	bool mouse = false;
 
 	cmd = "mouse_index";
@@ -650,25 +724,25 @@ int main(void){
         	ioctl(ip.fd, EVIOCGNAME(sizeof(name)),name);
 		string mname(name);
 		if(!mname.compare(cmd) && (mi == i)){
-       			syslog (LOG_INFO,"ecsysapp mouse found: %s",cmd.c_str());
+       			syslog (LOG_INFO,"mouse found: %s",cmd.c_str());
 			mouse = true;
 			break;
 		}else close(ip.fd);
 	}
 	if(!mouse){
-        	syslog (LOG_NOTICE,"ecsysapp failed mouse not found");
+        	syslog (LOG_NOTICE,"failed mouse not found");
 		return 0;
 	}
 	cmd = "camera";
 	access_dbase(cmd,DBSTRING);
-	syscam *pcam = new syscam(cmd);
+	ip.pcam = new syscam(cmd);
 	if(!cmd.compare("no")){
-        	syslog (LOG_NOTICE,"ecsysapp camera not configured");
-	}else if(pcam->type == NO_CAMERA){
-        	syslog (LOG_NOTICE,"ecsysapp failed camera not found");
+        	syslog (LOG_NOTICE,"camera not configured");
+	}else if(pipc->pcam->type == NO_CAMERA){
+        	syslog (LOG_NOTICE,"failed camera not found");
 		return 0;
 	}
-       	syslog (LOG_INFO,"ecsysapp camera found: %s",cmd.c_str());
+       	syslog (LOG_INFO,"camera found: %s",cmd.c_str());
 
 	cmd = "micro";
        	access_dbase(cmd,DBSTRING);
@@ -677,67 +751,38 @@ int main(void){
         snd_ctl_card_info_t* info;
         snd_ctl_card_info_alloca(&info);
         if (snd_card_next(&card) < 0 || card < 0) {
-        	syslog (LOG_NOTICE,"ecsysapp audio input failed to get devices");
+        	syslog (LOG_NOTICE,"audio input failed to get devices");
 		return 0;
         }
         while(card >= 0){
                 char name[16];
                 sprintf(name, "hw:%d", card);
                 if(snd_ctl_open(&handle, name, 0) < 0) {
-        		syslog (LOG_NOTICE,"ecsysapp audio input failedto open device: %s", name);
+        		syslog (LOG_NOTICE,"audio input failedto open device: %s", name);
 			return 0;
                 }
                 if(snd_ctl_card_info(handle, info) < 0) {
-        		syslog (LOG_NOTICE,"ecsysapp audio input failed to get info for device: %s", name);
+        		syslog (LOG_NOTICE,"audio input failed to get info for device: %s", name);
 			return 0;
                 }
 		string mic(snd_ctl_card_info_get_name(info));
 		if(!mic.compare(cmd)){
                 	ip.audio_in = card;
-       			syslog (LOG_INFO,"ecsysapp audio input found: %s index %d",cmd.c_str(),ip.audio_in);
+       			syslog (LOG_INFO,"audio input found: %s index %d",cmd.c_str(),ip.audio_in);
 			break;
 		}
                 snd_ctl_close(handle);
                 if (snd_card_next(&card) < 0) {
-        		syslog (LOG_NOTICE,"ecsysapp audio input failed to get next card");
+        		syslog (LOG_NOTICE,"audio input failed to get next card");
 			return 0;
                 }
         }
 	if(ip.audio_in <  0){
-        	syslog (LOG_NOTICE,"ecsysapp failed audio input not found");
+        	syslog (LOG_NOTICE,"failed audio input not found");
 		return 0;
 	}
 
-	vector <int> x,y,w,h;
-	cmd = "maskx";
-       	access_dbase(cmd,DBSTRING);
-	stringstream ss(cmd.c_str());
-	string sp;
-	while(getline(ss,sp,' '))x.push_back(stoi(sp));
-	cmd = "masky";
-       	access_dbase(cmd,DBSTRING);
-	ss = stringstream(cmd.c_str());
-	sp.clear();
-	while(getline(ss,sp,' '))y.push_back(stoi(sp));
-	cmd = "maskw";
-       	access_dbase(cmd,DBSTRING);
-	ss = stringstream(cmd.c_str());
-	sp.clear();
-	while(getline(ss,sp,' '))w.push_back(stoi(sp));
-	cmd = "maskh";
-       	access_dbase(cmd,DBSTRING);
-	ss = stringstream(cmd.c_str());
-	sp.clear();
-	while(getline(ss,sp,' '))h.push_back(stoi(sp));
-
-	Mat fmask = Mat::zeros(FRAME_H,FRAME_W,CV_8UC1);
-	for(unsigned int i = 0;i < h.size();i++)fmask(Rect(x[i],y[i],w[i],h[i])) = 255;
-	bitwise_not(fmask,fmask);
-
-	MotionDetector detector(1,0.2,20,0.1,5,10,2);
-	unsigned char ferror = 0;
-	unsigned long msec = 0;
-
+	
         pthread_t th_netproc_id;
         pthread_t th_dbproc_id;
         pthread_t th_displayproc_id;
@@ -748,72 +793,29 @@ int main(void){
 	while(!ip.nw_state);
 	pthread_create(&th_dbproc_id,NULL,dbproc,nullptr);
 	while(!ip.db_state);
-
-	ip.put->d = 0;
-	ip.put->h = 0;
-	ip.put->m = 0;
-
-	Mat frame;
-	Mat dframe;
-        std::list<cv::Rect2d>boxes;
-	vector<Mat>ch(3);
-
+	
+	
 #ifdef DEBUG
 	cout << "Main init" << endl;
 #endif
-	syslog(LOG_INFO,"ecsysapp initialized");
-        while(!exit_main){
-		if(!pcam->get_frame(frame)){
-			ferror++;
-			if(ferror >= MAX_FERR){
-				syslog(LOG_INFO,"ecsysapp ferror camera failed");
-				sighandler(6);
-			}
-			continue;	
-		}else{
-                	msec = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
-			ferror = 0;
-			
-		       	frame.copyTo(dframe);
-			split(dframe,ch);
-			bitwise_and(ch[0],fmask,ch[0]);
-			bitwise_and(ch[1],fmask,ch[1]);
-			bitwise_and(ch[2],fmask,ch[2]);
-			merge(ch,dframe);
-			ch.clear();
-                        boxes = detector.detect(dframe);
-			dframe.release();
-			if(boxes.size())for(auto i = boxes.begin(); i != boxes.end(); ++i)rectangle(frame,*i,Scalar(0,69,255),4,LINE_AA); 
-			resize(frame,frame,Size(640,480),INTER_LINEAR);
-			vframe vp;
-			for(int y = 0;y < frame.rows;y++){
-				for(int x = 0;x < frame.cols;x++){
-					pixel bgr;
-					bgr.b = frame.at<Vec3b>(y,x)[0];
-					bgr.g = frame.at<Vec3b>(y,x)[1];
-					bgr.r = frame.at<Vec3b>(y,x)[2];
-					vp.vpix.push_back(bgr);
-				}
-			}
-			frame.release();
-			vp.ts = msec;
-			if(boxes.size())vp.wr = true;
-                        else vp.wr = false;
-			boxes.clear();
-			mx.lock();
-			ip.vq.push_back(vp);
-			mx.unlock();
-        	}
-		if(access(RUN_TIME,F_OK))creat(RUN_TIME,0666);
-        }
-	delete pcam;
-       	delete ip.pcon;
 
+	syslog(LOG_INFO,"initialized");
+	while(!exit_main){
+		std::this_thread::sleep_for(std::chrono::milliseconds(500));
+		std::lock_guard<std::mutex> lock(cov_mx);
+		cov_v = 1;
+		cov.notify_all();
+#ifdef DEBUG
+        	std::cout << "main tick " <<  std::endl;
+#endif
+		if(access(RUN_TIME,F_OK))creat(RUN_TIME,0666);
+	}
         pthread_join(th_displayproc_id,NULL);
 	pthread_join(th_netproc_id,NULL);
 	pthread_join(th_dbproc_id,NULL);
 
-	syslog(LOG_INFO,"ecsysapp stopped");
+       	delete ip.pcon;
+	syslog(LOG_INFO,"stopped");
         closelog();
         return 0;
 }
