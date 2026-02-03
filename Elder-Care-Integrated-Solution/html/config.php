@@ -61,6 +61,7 @@
 				$sip = $row['sip'];
         			$night = $row['night'];
 				$res_reboot = $row['res_reboot'];
+				$photo = $row['photo'];
 			}
 			
 			echo '<table><tr>';
@@ -98,7 +99,7 @@
 			echo '<tr width=100%><td>VOICE_DURATION[0-24]</td><td><input type="number" id="voice_duration" name="voice_duration" value="';
 			echo $voice_duration;
 			echo '"></td></tr>';
-			echo '<tr width=100%><td>SEC</td><td><input type="text" id="sec" name="sec" value="';
+			echo '<tr width=100%><td>SECURITY_KEY</td><td><input type="text" id="sec" name="sec" value="';
 			echo $sec;
 			echo '"></td></tr>';
 			echo '<tr width=100%><td>ALARM IP</td><td><input type="text" id="aip" name="aip" value="';
@@ -107,14 +108,17 @@
 			echo '<tr width=100%><td>SOLAR IP</td><td><input type="text" id="sip" name="sip" value="';
 			echo $sip;
 			echo '"></td></tr>';
-			echo '<tr width=100%><td>ACCESS</td><td><input type="text" id="access" name="access" value="';
+			echo '<tr width=100%><td>ACCESS_PASSWORD</td><td><input type="text" id="access" name="access" value="';
 			echo $access;
 			echo '"></td></tr>';
-			echo '<tr width=100%><td>NIGHT MODE(8PM-6AM)</td><td><input type="text" id="night" name="night" value="';
+			echo '<tr width=100%><td>NIGHT MODE(7PM-7AM)[0-100]</td><td><input type="text" id="night" name="night" value="';
 			echo $night;
 			echo '"></td></tr>';
 			echo '<tr width=100%><td>REBOOT_THRESHOLD[60-100]</td><td><input type="text" id="res_reboot" name="res_reboot" value="';
 			echo $res_reboot;
+			echo '"></td></tr>';
+			echo '<tr width=100%><td>PHOTO_MODE[yes/no]</td><td><input type="text" id="photo" name="photo" value="';
+			echo $photo;
 			echo '"></td><td><input type="submit" value="Submit"></td></tr>';
 			echo '</table>';
 			echo '</form>';

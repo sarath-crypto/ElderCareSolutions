@@ -26,6 +26,7 @@
 	$access = 0;
 	$night = 0;
 	$res_reboot = 0;
+	$photo = 0;
 	$x = -1;
 	$y = -1;
 	$w = -1;
@@ -49,6 +50,7 @@
 		$access = htmlspecialchars($_POST['access']);
 		$night = htmlspecialchars($_POST['night']);
 		$res_reboot = htmlspecialchars($_POST['res_reboot']);
+		$photo = htmlspecialchars($_POST['photo']);
 		$x =  htmlspecialchars($_POST['x']);
 		$y =  htmlspecialchars($_POST['y']);
 		$w =  htmlspecialchars($_POST['w']);
@@ -78,6 +80,7 @@
 			if($access)$sql = $sql."access='".$access."',";	
 			if($night >= 0)$sql = $sql."night='".$night."',";	
 			if($res_reboot)$sql = $sql."res_reboot='".$res_reboot."',";	
+			if($photo)$sql = $sql."photo='".$photo."',";	
 			$sql = rtrim($sql,",");
 			if($sql != "UPDATE cfg SET "){
 				$result = $conn->query($sql);
