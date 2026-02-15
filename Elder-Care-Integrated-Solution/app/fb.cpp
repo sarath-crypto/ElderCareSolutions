@@ -124,6 +124,7 @@ frame_buffer::frame_buffer(unsigned char p){
 	}
 
         ut.uts = (unsigned long)time(NULL);
+	pipc->put = &ut;
 	ts = 0;
 	tp = 30;
 	prev_state = false;
@@ -179,7 +180,7 @@ void frame_buffer::display(bool bl){
 void frame_buffer::bled_brightness(unsigned char val){
 	fstream ofs;
 	ofs.open(FILE_BL,ios::in|ios::out|ios::binary);
-	if(!ofs.is_open())syslog(LOG_INFO,"ecsysapp failed to modify brightness file");
+	if(!ofs.is_open())syslog(LOG_INFO,"displayproc failed to modify brightness file");
 	if(val > 100)val = 100;
 	ofs <<(int)val;
 	cbled = val;
@@ -187,48 +188,46 @@ void frame_buffer::bled_brightness(unsigned char val){
 }
 
 void frame_buffer::drawscreen(void){
+	getuptime(&ut);
 	string ct;
 	gettimestamp(ct,false);
-	bool scr_state = false;
-	if(pipc->boot || pipc->alrm || !pipc->wifi){
-		scr_state = false;
-		ph_state = PHOTO_NO;
-	}else{
-	       	scr_state = true;
-	       	if(ph_state == PHOTO_HALT)ph_state = state;
-	}
+	unsigned char tm = stoi(ct.substr(0,2));
 
-	if(((stoi(ct.substr(0, 2)) >= 19) && (stoi(ct.substr(0, 2)) <= 23)) || (stoi(ct.substr(0, 2)) <= 6)){
-		if(scr_state){
-			if(prev_state != scr_state){
-				syslog(LOG_INFO,"ecsysapp night mode activated");
-				prev_state = scr_state;
-				if(pipc->bled){
-					bled_brightness(pipc->bled);
-				}else{
-					bled_brightness(0);
-				       	blank = true;
-				}
-			}
-		}else{
-			if(prev_state != scr_state){
-				syslog(LOG_INFO,"ecsysapp night mode de-activated");
-				prev_state = scr_state;
-				bled_brightness(100);
-				blank = false;
+	if(pipc->boot || pipc->alrm || !pipc->wifi){
+		if(blank || (cbled != 100)){
+			blank = false;
+			bled_brightness(100);
+			prev_state = false;
+		}
+		ph_state = PHOTO_NO;
+	}else if((ph_state == PHOTO_NO) && (state == PHOTO_INIT)){
+		ph_state = state;
+		prev_state = false;
+		if(blank || (cbled != 100)){
+			blank = false;
+			bled_brightness(100);
+		}
+	}else if(tm != 7){
+		if(!prev_state){
+			prev_state = true;
+			syslog(LOG_NOTICE,"Night mode Activated");
+			if(pipc->bled)bled_brightness(pipc->bled);
+			else{
+				bled_brightness(0);
+				blank = true;
 			}
 		}
-	}else if(blank || (cbled != 100)){
+	}else if(blank || !cbled){
+		syslog(LOG_NOTICE,"Night mode De-activated");
 		blank = false;
 		bled_brightness(100);
+		prev_state = false;
 	}
 
 	switch(ph_state){
 	case(PHOTO_NO):{
-		ph_state = PHOTO_HALT;
 		frame = Mat(SCREEN_W,SCREEN_H,CV_8UC3,Scalar(0,0,0));
 		rectangle(frame,Point(10,10),Point(1270,790),Scalar(255,255,0),2,LINE_AA);
-		getuptime(&ut);
 		string val;
 		Scalar col = Scalar(255,255,255);
 		line(frame,Point(40,90),Point(630,90),col,4,LINE_AA);
@@ -267,11 +266,8 @@ void frame_buffer::drawscreen(void){
 
 		val = "GRID_PWR";
 		putText(frame,val,Point(GL_POS_X,80),FONT_HERSHEY_COMPLEX,0.7,col,1);
-		if(!pipc->grid){
-			if(blink)rectangle(frame,Point(GL_POS_X,ALL_POS_Y),Point(GL_POS_W,ALL_POS_H),Scalar(0,0,255),-1,LINE_8);
-		}else{
-			rectangle(frame,Point(GL_POS_X,ALL_POS_Y),Point(GL_POS_W,ALL_POS_H),Scalar(0,0,255),-1,LINE_8);
-		}
+		if(!pipc->grid && blink)rectangle(frame,Point(GL_POS_X,ALL_POS_Y),Point(GL_POS_W,ALL_POS_H),Scalar(0,0,255),-1,LINE_8);
+		else rectangle(frame,Point(GL_POS_X,ALL_POS_Y),Point(GL_POS_W,ALL_POS_H),Scalar(0,0,255),-1,LINE_8);
 
 		if(pipc->vq.size()){
 			mx.lock();
@@ -335,15 +331,10 @@ void frame_buffer::drawscreen(void){
 			putText(frame,ct,Point(TIME_POS_X,TIME_POS_Y),FONT_HERSHEY_COMPLEX,9,Scalar(255,255,255),4);
 
 			if(pipc->alrm)alrm.copyTo(frame(Rect(MSG_POS_X,MSG_POS_Y,alrm.cols,alrm.rows)));
-			if(!pipc->wifi){
-				if(blink)wifi.copyTo(frame(Rect(MSG_POS_X,MSG_POS_Y,wifi.cols,wifi.rows)));
-			}
+			if(!pipc->wifi && blink)wifi.copyTo(frame(Rect(MSG_POS_X,MSG_POS_Y,wifi.cols,wifi.rows)));
 			display(blank);
 		}else if(fps)fps--;
 		frame.release();
-		break;
-	}
-	case(PHOTO_HALT):{
 		break;
 	}
 	case(PHOTO_INIT):{

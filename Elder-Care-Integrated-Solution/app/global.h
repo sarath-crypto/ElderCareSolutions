@@ -34,7 +34,7 @@ typedef struct DEVICE_INFO{
         vector<string> device_paths;
 }DEVICE_INFO;
 
-enum photo{PHOTO_HALT,PHOTO_NO,PHOTO_INIT,PHOTO_TRANSIT,PHOTO_60};
+enum photo{PHOTO_NO,PHOTO_INIT,PHOTO_TRANSIT,PHOTO_60};
 
 typedef struct ipc{
         vector <Mat> 	dq;
@@ -44,6 +44,7 @@ typedef struct ipc{
         sql::Driver *pdriver;
         sql::Connection *pcon;
 	syscam *pcam;
+	uptme	*put;
         int fd;
 
         unsigned char rm;
