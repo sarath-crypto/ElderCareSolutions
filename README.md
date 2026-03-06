@@ -1,1 +1,1 @@
-Read usecases.pdf to select appropriate solution
+Read UseCases.pdf to select appropriate solution
