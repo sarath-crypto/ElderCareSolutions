@@ -1,6 +1,8 @@
 #ifndef _GLOBAL_H_
 #define _GLOBAL_H_
 
+
+#include <mutex>
 #include <iostream>
 #include <string>
 #include <opencv2/opencv.hpp>
@@ -15,12 +17,18 @@
 #define DAY_SEC         	86400
 #define HR_SEC          	3600
 #define CONFIG_DIR_PATH_SZ	1024
-#define RSSI_MIN		-70
-#define FRAME_W			1920
-#define FRAME_H			1080
+
+#define FRAME_W			1280
+#define FRAME_H			720
+
+#define AUDIO_SZ		1024
 
 using namespace std;
 using namespace cv;
+
+typedef struct as{
+	unsigned short buf[AUDIO_SZ];
+}as;
 
 typedef struct frames{
         bool wr;
@@ -37,11 +45,15 @@ typedef struct DEVICE_INFO{
 enum photo{PHOTO_NO,PHOTO_INIT,PHOTO_TRANSIT,PHOTO_60};
 
 typedef struct ipc{
-        vector <Mat> 	dq;
-	vector <Mat>    vq;
         vector <double> sig;
-	
-        sql::Driver *pdriver;
+	vector <as>ainq;
+	vector <as>aoutq;
+
+	mutex mx_ain;
+	mutex mx_aout;
+	mutex mx_sig;
+        
+	sql::Driver *pdriver;
         sql::Connection *pcon;
 	syscam *pcam;
 	uptme	*put;
@@ -52,19 +64,23 @@ typedef struct ipc{
 	unsigned char whi;
         unsigned char wl;
         unsigned char bl;
-        unsigned char bled;
 	unsigned short uload;
         unsigned short sl;
-        short audio_in;
+	unsigned int voice_level;
 
-	bool solar;
-        bool wifi;
-        bool grid;
+	bool ac;
+	bool night;
         bool voice;
         bool alrm;
+	bool wifi;
+	bool solar;
+        bool grid;
+
 	bool nw_state;
         bool db_state;
         bool ds_state;
+        bool au_state;
+
         bool alm_sync;
 }ipc;
 

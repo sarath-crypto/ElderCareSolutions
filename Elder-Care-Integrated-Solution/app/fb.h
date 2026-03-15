@@ -15,22 +15,11 @@
 
 #include "global.h"
 
-#define FFT_SCALE	400
-
-#define IMG_X		12
-#define IMG_Y		112
-#define SCREEN_H	1280
-#define SCREEN_W	800
-
-#define FPS_TH		8
-#define VIDEO_W		774
-#define VIDEO_H		390
+#define SCREEN_H 800
+#define SCREEN_W 480
 
 using namespace std;
 using namespace cv;
-
-enum pb{BTS_RSSI = 1,BTS_BAT,BTM_RSSI,BTM_BAT};
-enum ws{WIFI_NO =1,WIFI_OK,WIFI_FAIL};
 
 typedef struct uptme{
         unsigned long  uts;
@@ -54,6 +43,8 @@ private:
 	bool blink;
 	bool prev_state;
 	bool blank;
+	bool ac;
+
 
 	Mat buffer;
 	Mat frame;
@@ -63,22 +54,18 @@ private:
        	Mat bg;
 	Mat fg;
 
-	vector <Mat> sq;
 	ofstream ofs;
 	
 	void display(bool);
-	unsigned char get_resources(void);
-	void bled_brightness(unsigned char);
 	string process_next_file(filesystem::directory_iterator&,const filesystem::directory_iterator&);
 	uptme ut;
 	unsigned char ph_state;
 	unsigned char state;
-	unsigned char cbled;
 	unsigned char tp;
-	unsigned char fps;
 	unsigned long ts;
 	double op;
 public:
+
 	unsigned char rm;
 	bool en;
 	frame_buffer(unsigned char);

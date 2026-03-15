@@ -12,6 +12,8 @@
 #include <fcntl.h>
 #include <sys/time.h>
 #include <sys/stat.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
 #include <filesystem>
 #include <fstream>
 #include <sys/types.h>
@@ -34,20 +36,22 @@
 #include <sys/param.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
+#include <sys/mman.h>
 #include <bits/stdc++.h>
 #include <linux/fb.h>
-#include <sys/mman.h>
 #include <wchar.h>
 #include <time.h>
 #include <termios.h>
 #include <regex>
-#include <alsa/asoundlib.h>
 #include <chrono>
 #include <condition_variable>
 #include <thread>
 #include <cstdint>
 #include <string>     
 #include <cstddef> 
+#include <rtaudio/RtAudio.h>
+#include <wiringPi.h>
+#include <unistd.h>
 
 #include <cppconn/driver.h>
 #include <cppconn/exception.h>
@@ -72,8 +76,11 @@
 #define MOUSE_PATH	"/dev/input/event"
 #define FILE_WRITE 	"/var/www/html/storage/"
 #define RUN_TIME	"/home/ecsys/app/access.txt"
-
+#define AUDIO_INPUT_SAMPLING_RATE	8000
+#define AUDIO_OUTPUT_SAMPLING_RATE      48000
 #define FILE_WR		1
+#define IR_REPEAT	5
+
 //#define DEBUG		1
 
 namespace fs = std::filesystem;
@@ -85,13 +92,13 @@ bool exit_main = false;
 bool exit_dbproc = false;
 bool exit_netproc = false;
 bool exit_displayproc = false;
+bool exit_audioproc = false;
 
 mutex mx;
 mutex cov_mx; 
 condition_variable cov;
 int cov_v = 0;
 
-enum	wav_type{BLIP = 1,BEEP,RING};
 enum	file_type{JPG = 1,TMR,TRG};
 enum 	dbtype{DBNONE = 1,DBINT,DBSTRING};
 
@@ -102,12 +109,38 @@ void  sighandler(int num){
 #ifdef DEBUG
 	cout << "sighandler " << num << endl;
 #endif
-	string cmd = "sudo reboot";
-	execute(cmd);
+	exit_audioproc = true;
 	exit_netproc = true;
 	exit_displayproc = true;
 	exit_dbproc = true;
         exit_main = true;
+}
+
+int callback_audio_out(void *obuf,void *,unsigned int nf,double,RtAudioStreamStatus,void *){
+	if(pipc->aoutq.size()){
+		memcpy((unsigned char *)obuf,pipc->aoutq[0].buf,AUDIO_SZ);
+		pipc->aoutq.erase(pipc->aoutq.begin());
+	}else{
+		memset(obuf,0,AUDIO_SZ);
+	}
+	return 0;
+}
+
+int callback_audio_in(void *,void *ibuf,unsigned int nf,double,RtAudioStreamStatus,void *){
+        as audio;
+        memcpy(audio.buf,ibuf,AUDIO_SZ);
+
+	pipc->mx_ain.lock();
+	if(pipc->ainq.size())pipc->ainq.erase(pipc->ainq.begin());
+        pipc->ainq.push_back(audio);
+	pipc->mx_ain.unlock();
+        return 0;
+}
+
+bool isuint(const std::string& s){
+	return !s.empty() && std::all_of(s.begin(), s.end(), [](unsigned char c){
+        	return std::isdigit(c);
+    	});
 }
 
 void sort(map<unsigned int,string>& M){
@@ -141,24 +174,24 @@ void file_write(char *pdata,unsigned long len,char type){
         close(fd);
 }
 
-void access_dbase(string &cmd,unsigned char type){
+bool access_dbase(string &cmd,unsigned char type){
 	string token = cmd;
       	if(!cmd.compare("mouse_level"))cmd = "select mouse_level from cfg";
 	else if(!cmd.compare("mouse_name"))cmd = "select mouse_name from cfg";
 	else if(!cmd.compare("mouse_index"))cmd = "select mouse_index from cfg";
 	else if(!cmd.compare("beacon_timeout"))cmd = "select beacon_timeout from cfg";
 	else if(!cmd.compare("dir_max"))cmd = "select dir_max from cfg";
-	else if(!cmd.compare("camera"))cmd = "select camera from cfg";
-	else if(!cmd.compare("micro"))cmd = "select micro from cfg";
-	else if(!cmd.compare("voice_threshold"))cmd = "select voice_threshold from cfg";
-	else if(!cmd.compare("voice_start"))cmd = "select voice_start from cfg";
-	else if(!cmd.compare("voice_duration"))cmd = "select voice_duration from cfg";
-	else if(!cmd.compare("sec"))cmd = "select sec from cfg";
+	else if(!cmd.compare("voice_th"))cmd = "select voice_th from cfg";
+	else if(!cmd.compare("voice"))cmd = "select voice from cfg";
+	else if(!cmd.compare("ac"))cmd = "select ac from cfg";
+	else if(!cmd.compare("cam"))cmd = "select cam from cfg";
+	else if(!cmd.compare("skey"))cmd = "select skey from cfg";
 	else if(!cmd.compare("aip"))cmd = "select aip from cfg";
 	else if(!cmd.compare("sip"))cmd = "select sip from cfg";
 	else if(!cmd.compare("access"))cmd = "select access from cfg";
 	else if(!cmd.compare("night"))cmd = "select night from cfg";
-	else if(!cmd.compare("res_reboot"))cmd = "select res_reboot from cfg";
+	else if(!cmd.compare("motion"))cmd = "select motion from cfg";
+	else if(!cmd.compare("reboot"))cmd = "select reboot from cfg";
 	else if(!cmd.compare("photo"))cmd = "select photo from cfg";
 	else if(!cmd.compare("maskx")){
 		cmd = "select x from mask";
@@ -186,31 +219,51 @@ void access_dbase(string &cmd,unsigned char type){
 	sql::Statement *stmt = pipc->pcon->createStatement();
 	switch(type){
 	case(DBNONE):{
-		stmt->execute(cmd.c_str());
+		try{
+			stmt->execute(cmd.c_str());
+		}catch(sql::SQLException &e){
+			delete stmt;
+			return false;
+		}
 		break;
 	}
 	case(DBINT):{
-		sql::ResultSet  *res = stmt->executeQuery(cmd.c_str());
-		if(res->next())cmd = to_string(res->getInt(1));
-		delete res;
+		sql::ResultSet  *res = NULL;
+		try{
+			res = stmt->executeQuery(cmd.c_str());
+			if(res->next())cmd = to_string(res->getInt(1));
+			delete res;
+		}catch(sql::SQLException &e){
+			delete stmt;
+			if(res)delete res;
+			return false;
+		}
 		break;
 	}
 	case(DBSTRING):{
-		sql::ResultSet  *res = stmt->executeQuery(cmd.c_str());
-		cmd.clear();
-		while(res->next()){
-			if(!cmd.length())cmd = res->getString(token.c_str());
-			else cmd = cmd + " " + res->getString(token.c_str());
+		sql::ResultSet  *res = NULL;
+		try{
+			res = stmt->executeQuery(cmd.c_str());
+			cmd.clear();
+			while(res->next()){
+				if(!cmd.length())cmd = res->getString(token.c_str());
+				else cmd = cmd + " " + res->getString(token.c_str());
+			}
+			delete res;
+		}catch(sql::SQLException &e){
+			delete stmt;
+			if(res)delete res;
+			return false;
 		}
-		delete res;
 		break;
 	}
 	}
 	delete stmt;
+	return true;
 }
 
 bool load_config(void){
-	string cmd = "delete from discover";
+	string cmd = "delete from syscon";
 	access_dbase(cmd,DBNONE);
 	char name[256] = "Unknown";
      	int fd = -1; 
@@ -222,7 +275,7 @@ bool load_config(void){
         	ioctl(fd, EVIOCGNAME(sizeof(name)), name);
 		string mname(name);
 		close(fd);
-		cmd = "insert into discover(id,name) values(";
+		cmd = "insert into syscon(id,name) values(";
 		cmd += to_string(idx)+",'"+ mname+"')";
 #ifdef DEBUG
 		cout << idx << " " << cmd << endl;
@@ -230,36 +283,14 @@ bool load_config(void){
 		access_dbase(cmd,DBNONE);
 		idx++;
 	}
-
-	cmd = "arecord -l";
-        execute(cmd);
-        vector <string> lines;
-        stringstream ss(cmd.c_str());
-        string sp;
-        while(getline(ss,sp,'\n'))lines.push_back(sp);
-        for(unsigned int i = 0;i < lines.size();i++){
-                string index = lines[i].substr(0,lines[i].find(" "));
-                if(!index.compare("card")){
-                        int sp = lines[i].find(" ");
-                        int ep = lines[i].find(":");
-                        string index = lines[i].substr(sp+1,ep-sp-1);
-                        sp = lines[i].find("[");
-                        ep = lines[i].find("]");
-                        string mic = lines[i].substr(sp+1,ep-sp-1);
-                        cmd = "insert into discover(id,name) values(";
-                        cmd += to_string(idx)+",'"+mic+"')";
-#ifdef DEBUG
-			cout << idx << " " << cmd << endl;
-#endif
-                        access_dbase(cmd,DBNONE);
-			idx++;
-                }
-        }
+		
+	cmd = "update cfg set reboot=0";
+	access_dbase(cmd,DBNONE);
 
 	cmd = "select count(*) from cfg";
 	access_dbase(cmd,DBINT);
 	if(!stoi(cmd)){
-		cmd = "insert into cfg (mouse_level,mouse_name,mouse_index,beacon_timeout,dir_max,camera,micro,voice_threshold,voice_start,voice_duration,sec,aip,sip,access,night,res_reboot,photo) values(0,'DEAFULT',0,15,14,'DEFAULT','DEFAULT',95,22,0,'ecsys_key','10.10.10.1','10.10.10.2','admin',0,70,'no')";
+		cmd = "insert into cfg(mouse_level,mouse_name,mouse_index,beacon_timeout,dir_max,voice_th,voice,ac,cam,skey,access,aip,sip,night,photo,motion,.reboot) values(0,'DEAFULT',1,15,7,140,'DEFAULT','DEFAULT','DEFAULT','ecsys_key','admin','192.168.0.100','192.168.0.105','DEFAULT','no','DEFAULT',0)";
 		access_dbase(cmd,DBNONE);
 	}
 	return true;
@@ -285,27 +316,29 @@ bool trigger_level(unsigned char mlvl,unsigned short code){
 void *dbproc(void *){
 	struct input_event ev;
         fd_set readfds;
-	bool photo = false;
-	
-	string cmd = "photo";
-        access_dbase(cmd,DBSTRING);
-        if(!cmd.compare("yes"))photo = true;
-
-	cmd = "mouse_level";
-	access_dbase(cmd,DBINT);
-	unsigned char mlvl = stoi(cmd);
-	cmd = "dir_max";
-	access_dbase(cmd,DBINT);
-	unsigned char dir_max = stoi(cmd);
 
 	struct timeval tv;
         tv.tv_sec = 1;
         tv.tv_usec = 0;
 	
+	string cmd = "mouse_level";
+	access_dbase(cmd,DBINT);
+	unsigned char mlvl = stoi(cmd);
+
+	cmd = "dir_max";
+	access_dbase(cmd,DBINT);
+	unsigned char dir_max = stoi(cmd);
+
+	vector <unsigned char>mot_map;
+        cmd = "motion";
+        access_dbase(cmd,DBSTRING);
+	stringstream ss(cmd.c_str());
+	string sp;
+        while(getline(ss,sp, ','))if(isuint(sp))mot_map.push_back(stoi(sp));
+
         cmd = "tsout";
 	access_dbase(cmd,DBSTRING);
 	file_write(cmd.data(),cmd.length(),TMR);
-	
         cmd = "tsin";
 	access_dbase(cmd,DBSTRING);
 	string prev_tsd = cmd;
@@ -313,8 +346,8 @@ void *dbproc(void *){
 	vector <int> x,y,w,h;
 	cmd = "maskx";
        	access_dbase(cmd,DBSTRING);
-	stringstream ss(cmd.c_str());
-	string sp;
+	ss = stringstream(cmd.c_str());
+	sp.clear();
 	while(getline(ss,sp,' '))x.push_back(stoi(sp));
 	cmd = "masky";
        	access_dbase(cmd,DBSTRING);
@@ -333,7 +366,11 @@ void *dbproc(void *){
 	while(getline(ss,sp,' '))h.push_back(stoi(sp));
 
 	Mat fmask = Mat::zeros(FRAME_H,FRAME_W,CV_8UC1);
-	for(unsigned int i = 0;i < h.size();i++)fmask(Rect(x[i],y[i],w[i],h[i])) = 255;
+	for(unsigned int i = 0;i < h.size();i++){
+		Rect rm = Rect(x[i],y[i],w[i],h[i]);
+		Mat roi = fmask(rm);
+		roi.setTo(Scalar(255));
+	}
 	bitwise_not(fmask,fmask);
 
 	MotionDetector detector(1,0.2,20,0.1,5,10,2);
@@ -354,7 +391,7 @@ void *dbproc(void *){
                 if(ret == -1){
                         syslog(LOG_INFO,"dbproc mouse select failed");
                         close(pipc->fd);
-			sighandler(0);
+			sighandler(10);
                 }else if(read(pipc->fd, &ev, ev_size) >= ev_size){
 		       	if((ev.type == 2) || (ev.type == 1)){
 				if(trigger_level(mlvl,ev.code) && !pipc->alrm){
@@ -365,32 +402,11 @@ void *dbproc(void *){
 			}
 		}
 
-	        cmd = "tsin";
-		access_dbase(cmd,DBSTRING);
-		if(prev_tsd.compare(cmd)){
-			prev_tsd = cmd;
-			cmd = "lenin";
-			access_dbase(cmd,DBINT);
-			unsigned int sz = stoi(cmd);
-			sql::Statement *stmt = pipc->pcon->createStatement();
-			sql::ResultSet *res = stmt->executeQuery("select data from in_img");
-			if(res->next()){
-				std::istream *blob = res->getBlob("data");
-				char buf[0x4000];
-				blob->read((char *)buf,sz);
-				vector<char> data(buf,buf+sz);
-				Mat mdq = imdecode(data,1);
-                        	pipc->dq.push_back(mdq);
-			}
-			delete stmt;
-			delete res;
-		}
-
 		if(!pipc->pcam->get_frame(frame)){
 			ferror++;
 			if(ferror >= MAX_FERR){
-				syslog(LOG_INFO,"ferror camera failed");
-				sighandler(6);
+				syslog(LOG_INFO,"dbproc ferror camera failed");
+				sighandler(11);
 			}
 			continue;	
 		}else{
@@ -401,29 +417,54 @@ void *dbproc(void *){
 			bitwise_and(ch[1],fmask,ch[1]);
 			bitwise_and(ch[2],fmask,ch[2]);
 			merge(ch,dframe);
+			
 			ch.clear();
 			boxes = detector.detect(dframe);
 			dframe.release();
-			if(boxes.size())for(auto i = boxes.begin(); i != boxes.end(); ++i)rectangle(frame,*i,Scalar(0,69,255),4,LINE_AA); 
-			resize(frame,frame,Size(640,420),INTER_LINEAR);
-
-			if(!photo){
-				mx.lock();
-				pipc->vq.push_back(frame);
-				mx.unlock();
+			if(boxes.size()){
+				if(mot_map.size()){
+					string ts;
+					gettimestamp(ts,false);
+					size_t pos = ts.find(':');
+					ts = ts.substr(0,pos); 
+					unsigned char hr = stoi(ts);
+					if((find(mot_map.begin(),mot_map.end(),hr) != mot_map.end()) && !pipc->alrm){
+						syslog(LOG_INFO,"dbproc motion trigger");
+						pipc->alrm = true;
+					}
+				}
+				for(auto i = boxes.begin(); i != boxes.end();i++)rectangle(frame,*i,Scalar(0,69,255),4,LINE_AA); 
 			}
+			resize(frame,frame,Size(640,480),INTER_LINEAR);
 
 			time_t t;
 			struct tm *ptm;
 			time(&t);
 			ptm = localtime(&t);
 			char ts[16];
-			strftime(ts,16,"%H%M%S[",ptm);
+			strftime(ts,16,"%H%M%S@",ptm);
 			string header(ts);
+			string s = to_string(pipc->put->d);
+			if(s.length() == 1)s = "0"+s;
+			header += s;
+			s = to_string(pipc->put->h);
+			if(s.length() == 1)s = "0"+s;
+			header += s;
+			s = to_string(pipc->put->m);
+			if(s.length() == 1)s = "0"+s;
+			header += s+"[";
+
 			if(pipc->wifi)header += "Alarm Connected";
 			else header += "Alarm Disconnected";
 			header += "]";	
 			putText(frame,header.c_str(),Point(0,24),FONT_HERSHEY_TRIPLEX,1,Scalar(0,0,250),1);
+
+			header = "AC:";
+			if(pipc->ac)header += "ON";
+			else header += "OFF";
+
+			if(pipc->voice)header += " VoiceLevel:"+to_string(pipc->voice_level);
+			putText(frame,header.c_str(),Point(0,475),FONT_HERSHEY_TRIPLEX,1,Scalar(0,0,250),1);
 
 			unsigned char q =  JPEG_QUALITY;
 			vector<unsigned char>buf;
@@ -452,19 +493,21 @@ void *dbproc(void *){
 				file_write((char *)buf.data(),buf.size(),JPG);
 #endif
 			}
-			sql::PreparedStatement *prep_stmt = pipc->pcon->prepareStatement("update out_img set data=?");
-                        struct membuf : std::streambuf {
-                                membuf(char* base, std::size_t n) {
-                                        this->setg(base, base, base + n);
-                                }
-                        };
-                        membuf mbuf((char*)buf.data(),buf.size());
-                        std::istream blob(&mbuf);
-                        prep_stmt->setBlob(1,&blob);
-                        prep_stmt->executeUpdate();
-                        delete prep_stmt;
-
-		
+			try{
+				sql::PreparedStatement *prep_stmt = pipc->pcon->prepareStatement("update out_img set data=?");
+				struct membuf : std::streambuf {
+					membuf(char* base, std::size_t n) {
+						this->setg(base, base, base + n);
+					}
+				};
+				membuf mbuf((char*)buf.data(),buf.size());
+				std::istream blob(&mbuf);
+				prep_stmt->setBlob(1,&blob);
+				prep_stmt->executeUpdate();
+				delete prep_stmt;
+			}catch(sql::SQLException &e){
+				syslog(LOG_INFO,"dbproc failed to update image blog");
+			}
                 }
       		pipc->db_state = true;
 
@@ -496,19 +539,17 @@ void *netproc(void *){
 	access_dbase(cmd,DBSTRING);
 	string sip = cmd;
 
-
-	vector <string> con;
 	string sp;
-	stringstream ss;
-
 	udps *pc = new udps(aip,sip);
 	if(!pc->state)syslog(LOG_INFO,"netproc network failed");
-	cmd = "res_reboot";
-	access_dbase(cmd,DBINT);
-	unsigned char res_reboot = stoi(cmd);
-	cmd = "sec";
+
+	cmd = "skey";
 	access_dbase(cmd,DBSTRING);
 	pc->key = cmd;
+
+	bool wifi_prev = false;
+
+
 	syslog(LOG_INFO,"started netproc");
 	while(!exit_netproc){
 		e = time(NULL);
@@ -518,7 +559,15 @@ void *netproc(void *){
 
 		if(((e-sb) >= beacon) && (sb != e)){
 			sb = e;
-			
+
+			cmd = "reboot";
+			if(access_dbase(cmd,DBINT)){
+				if(stoi(cmd)){
+					pipc->boot = 1;
+					syslog(LOG_INFO,"netproc application restart request recevied");
+				}
+			}
+
 			pc->txfifo_a.clear();
 			pdu p;
 			p.type = KAL;
@@ -536,13 +585,15 @@ void *netproc(void *){
 		}
 		pipc->wifi = pc->con_a;
 		pipc->solar = pc->con_s;
-			
-		if(pipc->rm > res_reboot){
-			pipc->boot = 1;
-			syslog(LOG_INFO,"displayproc degradation detected rebooting the system %d",pipc->rm);
+
+		if(pipc->wifi != wifi_prev){
+			wifi_prev = pipc->wifi;
+			if(pipc->wifi)syslog(LOG_INFO,"netproc wifi alarm online");
+			else syslog(LOG_INFO,"netproc wifi alarm offline");
 		}
-		if(pipc->boot == 2)sighandler(7);
-			
+
+		if(pipc->boot == 2)sighandler(20);
+
 		if(pipc->alrm){
 			pdu p;
 			p.type = ALM;
@@ -576,39 +627,13 @@ void *netproc(void *){
 
 
 void *displayproc(void *){
-	string cmd = "voice_threshold";
-	access_dbase(cmd,DBINT);
-	unsigned char cth = stoi(cmd);
+	vector <unsigned char>night_map;
+	string cmd = "night";
+	access_dbase(cmd,DBSTRING);
+	stringstream ss(cmd);
+	string val;
+	while(getline(ss,val, ','))if(isuint(val))night_map.push_back(stoi(val)); 
 	
-	fft afft(pipc->audio_in,cth);
-	if(!afft.en){
-        	syslog(LOG_INFO,"displayproc failed on fft");
-		sighandler(4);
-	}
-
-	cmd = "voice_start";
-	access_dbase(cmd,DBINT);
-	int chr = stoi(cmd);
-	if(chr > 23)chr = 23;
-	cmd = "voice_duration";
-	access_dbase(cmd,DBINT);
-       	int dur = stoi(cmd);
-	if(dur > 24)dur = 24;
-	vector <unsigned char> durmap;
-	for(int i = 0,h = 0;i < dur;i++,h++){
-		unsigned char hr = chr+h;
-		if(hr >= 24){
-			h = 0;
-			hr = 0;
-			chr = 0;
-		}
-		durmap.push_back(hr);	
-	}
-
-	cmd = "night";
-	access_dbase(cmd,DBINT);
-	pipc->bled = stoi(cmd);
-
 	cmd = "photo";
         access_dbase(cmd,DBSTRING);
 	unsigned char photo = PHOTO_NO;
@@ -616,29 +641,18 @@ void *displayproc(void *){
 	frame_buffer fb(photo);
 	if(fb.en == false){
 		syslog(LOG_INFO,"frame buffer failed");
-		sighandler(5);
+		sighandler(31);
 	}
-
         syslog(LOG_INFO,"started displayproc");
         while(!exit_displayproc){
-		afft.process(pipc->alrm);
-		if(dur){
+		if(night_map.size()){
 			string ts;
 			gettimestamp(ts,false);
 			size_t pos = ts.find(':');
 			ts = ts.substr(0,pos); 
 			unsigned char hr = stoi(ts);
-			for(unsigned int i = 0;i < durmap.size();i++){
-				if(durmap[i] == hr){
-					pipc->voice = true;
-					break;
-				}else pipc->voice = false;
-			}
-			if(afft.voice && pipc->voice && !pipc->alrm){
-				syslog(LOG_INFO,"displayproc voice trigger");
-				pipc->alrm = true;
-				afft.voice = false;
-			}
+			if(find(night_map.begin(),night_map.end(),hr) != night_map.end())pipc->night = true;
+			else pipc->night = false;
 		}
 		if(pipc->alm_sync){
 			fb.drawscreen();
@@ -653,11 +667,208 @@ void *displayproc(void *){
 #ifdef DEBUG
         	cout << "displayproc tick " << endl;
 #endif
-
         }
         syslog(LOG_INFO,"displayproc stopped");
         return NULL;
 }
+
+
+void *audioproc(void *){
+	unsigned int bufferFrames = 512;
+	RtAudio dac;
+	RtAudio::StreamParameters oParams;
+	dac.showWarnings(false);
+	std::vector<unsigned int> devids = dac.getDeviceIds();
+	if(devids.size() < 1){
+		syslog(LOG_INFO,"audioproc audio output devices not found");
+		sighandler(40);
+	}
+	oParams.nChannels = 1;
+	oParams.firstChannel = 0;
+	oParams.deviceId = dac.getDefaultOutputDevice();
+	if(dac.openStream(&oParams,NULL,RTAUDIO_SINT16,AUDIO_OUTPUT_SAMPLING_RATE,&bufferFrames,&callback_audio_out,nullptr)){
+		syslog(LOG_INFO,"audioproc openstream failed");
+		if(dac.isStreamOpen())dac.closeStream();
+		sighandler(41);
+	}
+	if(dac.isStreamOpen() == false){
+		syslog(LOG_INFO,"audioproc isstreamopen failed");
+		if(dac.isStreamOpen())dac.closeStream();
+		sighandler(42);
+	}
+	if((dac.startStream())){
+		syslog(LOG_INFO,"audioproc starttreamopen failed");
+		if(dac.isStreamOpen())dac.closeStream();
+		sighandler(43);
+	}
+
+	vector <unsigned char>ac_map;
+        string cmd = "ac";
+        access_dbase(cmd,DBSTRING);
+        stringstream ss(cmd);
+        string val;
+        while(getline(ss,val, ','))if(isuint(val))ac_map.push_back(stoi(val));
+
+	cmd = "voice_th";
+	access_dbase(cmd,DBINT);
+	unsigned int cth = stoi(cmd);
+
+	vector <unsigned char>voice_map;
+	cmd = "voice";
+	access_dbase(cmd,DBSTRING);
+	ss = stringstream(cmd);
+	while(getline(ss,val, ','))if(isuint(val))voice_map.push_back(stoi(val)); 
+
+
+	RtAudio adc;
+	RtAudio::StreamParameters iParams;
+	adc.showWarnings(false);
+	vector<unsigned int> devs = adc.getDeviceIds();
+	if (devs.size() < 1 ) {
+		syslog(LOG_INFO,"audioproc audio input devices not found");
+		sighandler(36);
+	}
+	iParams.nChannels = 1;
+	iParams.firstChannel = 0;
+	iParams.deviceId = adc.getDefaultInputDevice();
+	if(adc.openStream(NULL,&iParams,RTAUDIO_SINT16,AUDIO_INPUT_SAMPLING_RATE,&bufferFrames,&callback_audio_in,&pipc->ainq)){
+		syslog(LOG_INFO,"audioproc openstream failed");
+		if(adc.isStreamOpen())adc.closeStream();
+		sighandler(31);
+	}
+	if(adc.isStreamOpen() == false){
+		syslog(LOG_INFO,"audioproc isstreamopen failed");
+		if(adc.isStreamOpen())adc.closeStream();
+		sighandler(32);
+	}
+	if((adc.startStream())){
+		syslog(LOG_INFO,"audioproc starttreamopen failed");
+		if(adc.isStreamOpen())adc.closeStream();
+		sighandler(33);
+	}
+	fft afft(cth);
+	if(!afft.en){
+        	syslog(LOG_INFO,"audioproc failed on fft");
+		sighandler(30);
+	}
+
+	vector <unsigned char> on = {0x2A,0x08,0x2A,0x08,0x2A,0x0A,0x0A,0xA0,0xAA,0xAA,0xA8,0x28,0x20,0xAA,0x08,0x20,0xA0,0x82,0xA0,0x82,0x0A,0x08,0x2A,0x08,0x20,0xA0,0x82,0xA8,0x2A,0x82,0xAA,0xAA,0x82,0xA0,0x82,0xA0};
+	vector <unsigned char> off ={0xA8,0x20,0xA8,0x20,0xA8,0x28,0x2A,0xAA,0xAA,0xAA,0x0A,0x08,0x2A,0x82,0x08,0x28,0x20,0xA8,0x20,0x82,0x82,0x0A,0x82,0x08,0x28,0x41,0x54,0x15,0x41,0x55,0x55,0x04,0x15,0x04,0x15};
+	as  as_data;
+	bool ac = false;
+	unsigned char cnt = 0;
+        vector <bool> sig;
+        syslog(LOG_INFO,"audioproc started");
+	while(!exit_audioproc){
+		pipc->au_state = true;
+
+		if(adc.isStreamRunning() == false){
+			syslog(LOG_INFO,"audioproc isstreamRunning failed");
+			sighandler(35);
+		}
+		afft.process();
+		if(voice_map.size()){
+			string ts;
+			gettimestamp(ts,false);
+			size_t pos = ts.find(':');
+			ts = ts.substr(0,pos); 
+			unsigned char hr = stoi(ts);
+			if(find(voice_map.begin(),voice_map.end(),hr) != voice_map.end())pipc->voice = true;
+			else pipc->voice = false;
+			
+			if(afft.voice && pipc->voice && !pipc->alrm){
+				syslog(LOG_INFO,"audioproc voice trigger");
+				pipc->alrm = true;
+				afft.voice = false;
+			}
+		}
+
+		if(ac_map.size()){
+			string ts;
+			gettimestamp(ts,false);
+			size_t pos = ts.find(':');
+			ts = ts.substr(0,pos); 
+			unsigned char hr = stoi(ts);
+			if(find(ac_map.begin(),ac_map.end(),hr) != ac_map.end())pipc->ac = true;
+			else pipc->ac = false;
+		}
+
+		if(pipc->ac != ac){
+			vector <unsigned char> ac_cmd;
+			ac = pipc->ac;
+			if(ac){
+				ac_cmd = on;
+				syslog(LOG_INFO,"audioproc AC on");
+			}else{
+			       	ac_cmd = off;
+				syslog(LOG_INFO,"audioproc AC off");
+			}
+		        vector <bool> bin;
+			for(unsigned int i = 0;i < ac_cmd.size();i++){
+                                for(int p = 7;p >= 0;p--){
+                                        if(ac_cmd[i] & (1 << p))bin.push_back(true);
+                                        else bin.push_back(false);
+                                }
+                        }
+			ac_cmd.clear();
+
+                        for(unsigned int  i = 0;i < bin.size();i++){
+                                unsigned char pc = 0;
+                                bool am = false;
+                                if(bin[i]){
+                                        am = true;
+                                        pc = 50;
+                                }else{
+                                        am = false;
+                                        pc = 27;
+                                }
+                                while(pc){
+                                        sig.push_back(am);
+                                        pc--;
+                                }
+                        }
+			bin.clear();
+			cnt = IR_REPEAT;
+		}
+		if(cnt){
+                        unsigned int bp = 0;
+                        for(unsigned int i = 0;i < sig.size();i++){
+                                if(sig[i])as_data.buf[bp] = 32767;
+                                else as_data.buf[bp] = -32768;
+
+                                if(bp < AUDIO_SZ/2)bp++;
+                                else{
+                                        pipc->aoutq.push_back(as_data);
+                                        bp = 0;
+                                }
+                        }
+                        if(bp < AUDIO_SZ/2){
+                                for(unsigned int i = 0;i < (AUDIO_SZ/2-bp);i++)as_data.buf[bp+i] = 0;
+                                bp = 0;
+                                pipc->aoutq.push_back(as_data);
+                        }
+			cnt--;
+			if(!cnt)sig.clear();
+		}
+
+		if(dac.isStreamRunning() == false){
+			syslog(LOG_INFO,"audioproc isstreamRunning failed");
+			sighandler(41);
+		}
+
+		cov_v = 0;
+		unique_lock<std::mutex> lock(cov_mx);
+    		cov.wait(lock, []{ return cov_v == 1; });
+#ifdef DEBUG
+        	cout << "audioproc tick " << endl;
+#endif
+	}
+	if(adc.isStreamOpen())adc.closeStream();
+	if(dac.isStreamOpen())dac.closeStream();
+        syslog(LOG_INFO,"audioproc stopped");
+	return NULL;
+}
+
 
 int main(void){
 	ipc ip;
@@ -700,12 +911,17 @@ int main(void){
 
 	ip.wifi = false;
 	ip.alrm = false;
+	ip.ac =  false;
+	ip.night = false;
+        ip.voice = false;
+	ip.solar = false;
+        ip.grid = false;
+
+	ip.alm_sync = false;
 	ip.db_state = false;
 	ip.ds_state = false;
 	ip.nw_state = false;
-	ip.fd = -1;
-	ip.alm_sync = false;
-	ip.audio_in = -1;
+	ip.au_state = false;
      	ip.fd = -1; 
 
 	string cmd;
@@ -733,7 +949,8 @@ int main(void){
         	syslog (LOG_NOTICE,"failed mouse not found");
 		return 0;
 	}
-	cmd = "camera";
+	
+	cmd = "cam";
 	access_dbase(cmd,DBSTRING);
 	ip.pcam = new syscam(cmd);
 	if(!cmd.compare("no")){
@@ -743,49 +960,11 @@ int main(void){
 		return 0;
 	}
        	syslog (LOG_INFO,"camera found: %s",cmd.c_str());
-
-	cmd = "micro";
-       	access_dbase(cmd,DBSTRING);
-        int card = -1;
-        snd_ctl_t* handle;
-        snd_ctl_card_info_t* info;
-        snd_ctl_card_info_alloca(&info);
-        if (snd_card_next(&card) < 0 || card < 0) {
-        	syslog (LOG_NOTICE,"audio input failed to get devices");
-		return 0;
-        }
-        while(card >= 0){
-                char name[16];
-                sprintf(name, "hw:%d", card);
-                if(snd_ctl_open(&handle, name, 0) < 0) {
-        		syslog (LOG_NOTICE,"audio input failedto open device: %s", name);
-			return 0;
-                }
-                if(snd_ctl_card_info(handle, info) < 0) {
-        		syslog (LOG_NOTICE,"audio input failed to get info for device: %s", name);
-			return 0;
-                }
-		string mic(snd_ctl_card_info_get_name(info));
-		if(!mic.compare(cmd)){
-                	ip.audio_in = card;
-       			syslog (LOG_INFO,"audio input found: %s index %d",cmd.c_str(),ip.audio_in);
-			break;
-		}
-                snd_ctl_close(handle);
-                if (snd_card_next(&card) < 0) {
-        		syslog (LOG_NOTICE,"audio input failed to get next card");
-			return 0;
-                }
-        }
-	if(ip.audio_in <  0){
-        	syslog (LOG_NOTICE,"failed audio input not found");
-		return 0;
-	}
-
-	
-        pthread_t th_netproc_id;
+		
+	pthread_t th_netproc_id;
         pthread_t th_dbproc_id;
         pthread_t th_displayproc_id;
+        pthread_t th_audioproc_id;
 
 	pthread_create(&th_displayproc_id,NULL,displayproc,nullptr);
 	while(!ip.ds_state);
@@ -793,12 +972,12 @@ int main(void){
 	while(!ip.nw_state);
 	pthread_create(&th_dbproc_id,NULL,dbproc,nullptr);
 	while(!ip.db_state);
-	
-	
+	pthread_create(&th_audioproc_id,NULL,audioproc,nullptr);
+	while(!ip.au_state);
+
 #ifdef DEBUG
 	cout << "Main init" << endl;
 #endif
-
 	syslog(LOG_INFO,"initialized");
 	while(!exit_main){
 		std::this_thread::sleep_for(std::chrono::milliseconds(500));
@@ -810,11 +989,12 @@ int main(void){
 #endif
 		if(access(RUN_TIME,F_OK))creat(RUN_TIME,0666);
 	}
+        pthread_join(th_audioproc_id,NULL);
         pthread_join(th_displayproc_id,NULL);
 	pthread_join(th_netproc_id,NULL);
 	pthread_join(th_dbproc_id,NULL);
-
-       	delete ip.pcon;
+	
+	if(ip.pcon)delete ip.pcon;
 	syslog(LOG_INFO,"stopped");
         closelog();
         return 0;

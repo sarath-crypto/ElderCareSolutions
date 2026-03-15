@@ -1,5 +1,5 @@
 #include <iostream>
-#include <lccv.hpp>
+//#include <lccv.hpp>
 #include <opencv2/opencv.hpp>
 #include <syslog.h>
 #include <queue>
@@ -39,6 +39,7 @@
 #define JPEG_QUALITY	50
 #define PHOTO_PATH      "/home/ecsys/app/vidcli/photos/"
 
+//#define SCREEN	1
 //#define PHOTO		1
 
 using namespace std;
@@ -221,6 +222,7 @@ int main(){
         syslog (LOG_NOTICE, "secapp started by uid %d", getuid ());
 
 	syscam *pcam = new syscam("no");
+	//syscam *pcam = new syscam("HD Web Camera: FINGERS 1080 Hi-");
 
 	Mat frame;
         unsigned char ferror = 0;
@@ -239,19 +241,24 @@ int main(){
                         ferror++;
                         continue;
                 }else{
-                        ferror = 0;
-                        resize(frame,frame,Size(640,480),INTER_LINEAR);
-
-                        time_t t;
-                        struct tm *ptm;
-                        time(&t);
-                        ptm = localtime(&t);
-                        char ts[16];
-                        strftime(ts,16,"%H%M%S",ptm);
-                        frames f;
-			f.frame = frame;
-                        fq.push(f);
-			cout << fc++ <<endl;
+			ferror = 0;
+#ifdef SCREEN
+			frame = imread("/home/ecsys/app/vidcli/scr.jpg",IMREAD_COLOR);
+#endif
+			if(!frame.empty()){
+				resize(frame,frame,Size(640,480),INTER_LINEAR);
+				time_t t;
+				struct tm *ptm;
+				time(&t);
+				ptm = localtime(&t);
+				char ts[16];
+				strftime(ts,16,"%H%M%S",ptm);
+				frames f;
+				f.frame = frame;
+				fq.push(f);
+				cout << fc++ <<endl;
+			}
+			sleep(1);
                 }
                 if(ferror >= MAX_FERR){
                         syslog(LOG_INFO,"ecsysapp ferror camera failed");

@@ -60,7 +60,7 @@ bool syscam::get_frame(Mat & frame){
 			break;
 		}
 		default:{
-        		frame = Mat(768,1024,CV_8UC3, Scalar(100,0,0));
+        		frame = Mat(FRAME_H,FRAME_W,CV_8UC3, Scalar(100,0,0));
 			Point p1(random()%100,random()%100);
     			Point p2(random()%1024,random()%1024);
     			int thickness = -1;

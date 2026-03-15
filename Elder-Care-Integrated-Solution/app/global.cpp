@@ -38,7 +38,6 @@
 #include <time.h>
 #include <termios.h>
 #include <regex>
-#include <alsa/asoundlib.h>
 #include <chrono>
 #include <cstdint>
 #include <iostream>
