@@ -766,7 +766,7 @@ void *audioproc(void *){
 			syslog(LOG_INFO,"audioproc isstreamRunning failed");
 			sighandler(35);
 		}
-		afft.process();
+		if(!pipc->alrm)afft.process();
 		if(voice_map.size()){
 			string ts;
 			gettimestamp(ts,false);
