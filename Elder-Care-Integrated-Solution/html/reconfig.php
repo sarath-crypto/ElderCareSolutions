@@ -10,7 +10,9 @@
                 exit();
 	}
 
-	$mouse_level = 0;
+	$mouse_levela = 0;
+	$mouse_levelb = 0;
+	$mouse_bhrs = 0;
 	$mouse_name = 0;
 	$mouse_index = 0;
 	$beacon_timeout = 0;
@@ -25,6 +27,7 @@
 	$access = 0;
 	$night = 0;
 	$motion = 0;
+	$aco = 0;
 	$photo = 0;
 	$x = -1;
 	$y = -1;
@@ -33,7 +36,9 @@
 	$id = 0;
 	
         if ($_SERVER["REQUEST_METHOD"] == "POST") {
-		$mouse_level = htmlspecialchars($_POST['mouse_level']);
+		$mouse_levela = htmlspecialchars($_POST['mouse_levela']);
+		$mouse_levelb = htmlspecialchars($_POST['mouse_levelb']);
+		$mouse_bhrs = htmlspecialchars($_POST['mouse_bhrs']);
 		$mouse_name = htmlspecialchars($_POST['mouse_name']);
 		$mouse_index = htmlspecialchars($_POST['mouse_index']);
 		$beacon_timeout = htmlspecialchars($_POST['beacon_timeout']);
@@ -48,6 +53,7 @@
 		$access = htmlspecialchars($_POST['access']);
 		$night = htmlspecialchars($_POST['night']);
 		$motion = htmlspecialchars($_POST['motion']);
+		$aco = htmlspecialchars($_POST['aco']);
 		$photo = htmlspecialchars($_POST['photo']);
 		$x =  htmlspecialchars($_POST['x']);
 		$y =  htmlspecialchars($_POST['y']);
@@ -62,7 +68,9 @@
                         die("Connection failed: " . $conn->connect_error);
 		}else{
 			$sql = "UPDATE cfg SET ";
-			if($mouse_level >= 0)$sql = $sql."mouse_level=".$mouse_level.",";	
+			if($mouse_levela >= 0)$sql = $sql."mouse_levela=".$mouse_levela.",";	
+			if($mouse_levelb >= 0)$sql = $sql."mouse_levelb=".$mouse_levelb.",";	
+			if($mouse_bhrs)$sql = $sql."mouse_bhrs='".$mouse_bhrs."',";	
 			if($mouse_name)$sql = $sql."mouse_name='".$mouse_name."',";	
 			if($mouse_index >= 0)$sql = $sql."mouse_index='".$mouse_index."',";	
 			if($beacon_timeout >= 0)$sql = $sql."beacon_timeout=".$beacon_timeout.",";	
@@ -77,6 +85,7 @@
 			if($access)$sql = $sql."access='".$access."',";	
 			if($night)$sql = $sql."night='".$night."',";	
 			if($motion)$sql = $sql."motion='".$motion."',";	
+			if($aco)$sql = $sql."aco=".$aco.",";	
 			if($photo)$sql = $sql."photo='".$photo."',";	
 			$sql = rtrim($sql,",");
 			if($sql != "UPDATE cfg SET "){

@@ -45,7 +45,9 @@
 		$result = $conn->query($sql);
 		if ($result->num_rows > 0) {
 			while($row = $result->fetch_assoc()){
- 				$mouse_level = $row['mouse_level'];
+ 				$mouse_levela = $row['mouse_levela'];
+ 				$mouse_levelb = $row['mouse_levelb'];
+ 				$mouse_bhrs = $row['mouse_bhrs'];
         			$mouse_name = $row['mouse_name'];
         			$mouse_index = $row['mouse_index'];
         			$beacon_timeout = $row['beacon_timeout'];
@@ -60,6 +62,7 @@
 				$sip = $row['sip'];
         			$night = $row['night'];
         			$motion = $row['motion'];
+        			$aco = $row['aco'];
 				$photo = $row['photo'];
 			}
 			
@@ -68,8 +71,14 @@
 
 			echo '<form action="reconfig.php" method="POST" id="action-form">';
 			echo '<table><tr>';
-			echo '<tr width=100%><td>MOUSE_LEVEL[0-5]</td><td><input type="number" style="width: 250px" id="mouse_level" name="mouse_level" value="';
-			echo $mouse_level;
+			echo '<tr width=100%><td>MOUSE_LEVEL_A[0-5]</td><td><input type="number" style="width: 250px" id="mouse_levela" name="mouse_levela" value="';
+			echo $mouse_levela;
+			echo '"></td></tr>';
+			echo '<tr width=100%><td>MOUSE_LEVEL_B[0-5]</td><td><input type="number" style="width: 250px" id="mouse_levelb" name="mouse_levelb" value="';
+			echo $mouse_levelb;
+			echo '"></td></tr>';
+			echo '<tr width=100%><td>MOUSE_LEVEL_B_HOURS[0,1,2...23]</td><td><input type="text" style="width: 250px" id="mouse_bhrs" name="mouse_bhrs" value="';
+			echo $mouse_bhrs;
 			echo '"></td></tr>';
 			echo '<tr width=100%><td>MOUSE_NAME</td><td><input type="text" style="width: 250px" id="mouse_name" name="mouse_name" value="';
 			echo $mouse_name;
@@ -112,6 +121,9 @@
 			echo '"></td></tr>';
 			echo '<tr width=100%><td>ACCESS_PASSWORD</td><td><input type="text" style="width: 250px" id="access" name="access" value="';
 			echo $access;
+			echo '"></td></tr>';
+			echo '<tr width=100%><td>AC CUT OFF TEMPERATURE</td><td><input type="text" style="width: 250px" id="aco" name="aco" value="';
+			echo $aco;
 			echo '"></td></tr>';
 			echo '<tr width=100%><td>PHOTO_MODE[yes/no]</td><td><input type="text" style="width: 250px" id="photo" name="photo" value="';
 			echo $photo;
