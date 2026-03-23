@@ -33,8 +33,8 @@
 #define FB_DEVICE 	"/dev/fb0"
 #define PHOTO_PATH      "/home/ecsys/app/photos/"
 
-#define BAR_POS_X	550
-#define SPEC_POS_X	290
+#define BAR_POS_X	530
+#define SPEC_POS_X	260
 #define SPEC_POS_Y	470
 #define TIME_POS_X	50
 #define TIME_POS_Y	420
@@ -219,12 +219,20 @@ void frame_buffer::drawscreen(void){
 		val = "UPTIME ["+to_string(ut.d)+":"+to_string(ut.h)+":"+to_string(ut.m)+"]";
 		putText(frame,val,Point(10,460),FONT_HERSHEY_COMPLEX,0.9,Scalar(0,255,0),1);
 
-		if(pipc->ac && blink){
-			val = "AC";
+		if(pipc->ac){
+		       	if(blink){
+				val = to_string(pipc->temp)+" C";
+				putText(frame,val,Point(BAR_POS_X,460),FONT_HERSHEY_COMPLEX,0.9,Scalar(255,255,255),1);
+				circle(frame,Point(BAR_POS_X+45,445),5,Scalar(255,255,255),1,LINE_8,0);
+			}
+		}else{
+			val = to_string(pipc->temp)+" C";
 			putText(frame,val,Point(BAR_POS_X,460),FONT_HERSHEY_COMPLEX,0.9,Scalar(255,255,255),1);
+			circle(frame,Point(BAR_POS_X+45,445),5,Scalar(255,255,255),1,LINE_8,0);
 		}
+
 		val = "LOAD "+to_string(pipc->uload)+"W";
-		putText(frame,val,Point(BAR_POS_X+50,460),FONT_HERSHEY_COMPLEX,0.9,Scalar(0,255,0),1);
+		putText(frame,val,Point(BAR_POS_X+75,460),FONT_HERSHEY_COMPLEX,0.9,Scalar(0,255,0),1);
 
 		if(pipc->boot){
 			if(ts != (unsigned long)time(NULL)){

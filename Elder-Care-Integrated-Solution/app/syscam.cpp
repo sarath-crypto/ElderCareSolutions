@@ -37,7 +37,7 @@ syscam::syscam(string cam){
        			for(const auto & path : device.device_paths)index.push_back((int)(path[path.length()-1]-'0'));
 		}
     	}
-	for(int i = 0;i < index.size();i++){
+	for(unsigned int i = 0;i < index.size();i++){
 		usb = VideoCapture(index[i]);
 		if(usb.isOpened()){
 			type = USB_CAMERA;

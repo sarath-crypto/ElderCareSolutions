@@ -65,6 +65,7 @@
 #include "fb.h"
 #include "fft.h"
 #include "udps.h"
+#include "ds18b20.h"
 
 #define JPEG_QUALITY	50
 #define RING_DURATION	14
@@ -176,7 +177,9 @@ void file_write(char *pdata,unsigned long len,char type){
 
 bool access_dbase(string &cmd,unsigned char type){
 	string token = cmd;
-      	if(!cmd.compare("mouse_level"))cmd = "select mouse_level from cfg";
+      	if(!cmd.compare("mouse_levela"))cmd = "select mouse_levela from cfg";
+	else if(!cmd.compare("mouse_levelb"))cmd = "select mouse_levelb from cfg";
+	else if(!cmd.compare("mouse_bhrs"))cmd = "select mouse_bhrs from cfg";
 	else if(!cmd.compare("mouse_name"))cmd = "select mouse_name from cfg";
 	else if(!cmd.compare("mouse_index"))cmd = "select mouse_index from cfg";
 	else if(!cmd.compare("beacon_timeout"))cmd = "select beacon_timeout from cfg";
@@ -191,6 +194,7 @@ bool access_dbase(string &cmd,unsigned char type){
 	else if(!cmd.compare("access"))cmd = "select access from cfg";
 	else if(!cmd.compare("night"))cmd = "select night from cfg";
 	else if(!cmd.compare("motion"))cmd = "select motion from cfg";
+	else if(!cmd.compare("aco"))cmd = "select aco from cfg";
 	else if(!cmd.compare("reboot"))cmd = "select reboot from cfg";
 	else if(!cmd.compare("photo"))cmd = "select photo from cfg";
 	else if(!cmd.compare("maskx")){
@@ -290,7 +294,7 @@ bool load_config(void){
 	cmd = "select count(*) from cfg";
 	access_dbase(cmd,DBINT);
 	if(!stoi(cmd)){
-		cmd = "insert into cfg(mouse_level,mouse_name,mouse_index,beacon_timeout,dir_max,voice_th,voice,ac,cam,skey,access,aip,sip,night,photo,motion,.reboot) values(0,'DEAFULT',1,15,7,140,'DEFAULT','DEFAULT','DEFAULT','ecsys_key','admin','192.168.0.100','192.168.0.105','DEFAULT','no','DEFAULT',0)";
+		cmd = "insert into cfg(mouse_levela,mouse_levelb,mouse_bhrs,mouse_name,mouse_index,beacon_timeout,dir_max,voice_th,voice,ac,cam,skey,access,aip,sip,night,photo,motion,aco,reboot) values(0,0,'DEFAULT','DEAFULT',1,15,2,13200,'DEFAULT','DEFAULT','DEFAULT','ecsys_key','admin','192.168.0.105','192.168.0.101','DEFAULT','no','DEFAULT',25,0)";
 		access_dbase(cmd,DBNONE);
 	}
 	return true;
@@ -305,10 +309,11 @@ bool trigger_level(unsigned char mlvl,unsigned short code){
        	int index =  -1;
 	auto it = find(levels.begin(),levels.end(),code); 
 	if(it != levels.end()){
+		if(mlvl == 5)return true;
         	index = it - levels.begin(); 
 		if((index >= 5) && (mlvl == 0))return true;
-		if((index >= 2) && (mlvl == 1))return true;
-		if((index >= 0) && (mlvl == 2))return true;
+		if((index >= 3) && (mlvl == 1))return true;
+		if((index >= 1) && (mlvl == 2))return true;
 	}
 	return false;
 }
@@ -321,9 +326,13 @@ void *dbproc(void *){
         tv.tv_sec = 1;
         tv.tv_usec = 0;
 	
-	string cmd = "mouse_level";
+	string cmd = "mouse_levela";
 	access_dbase(cmd,DBINT);
-	unsigned char mlvl = stoi(cmd);
+	unsigned char mlvla = stoi(cmd);
+
+	cmd = "mouse_levelb";
+	access_dbase(cmd,DBINT);
+	unsigned char mlvlb = stoi(cmd);
 
 	cmd = "dir_max";
 	access_dbase(cmd,DBINT);
@@ -335,6 +344,13 @@ void *dbproc(void *){
 	stringstream ss(cmd.c_str());
 	string sp;
         while(getline(ss,sp, ','))if(isuint(sp))mot_map.push_back(stoi(sp));
+
+	vector <unsigned char>mlb_map;
+        cmd = "mouse_bhrs";
+        access_dbase(cmd,DBSTRING);
+	ss = stringstream(cmd.c_str());
+	sp.clear();
+        while(getline(ss,sp, ','))if(isuint(sp))mlb_map.push_back(stoi(sp));
 
         cmd = "tsout";
 	access_dbase(cmd,DBSTRING);
@@ -394,8 +410,20 @@ void *dbproc(void *){
 			sighandler(10);
                 }else if(read(pipc->fd, &ev, ev_size) >= ev_size){
 		       	if((ev.type == 2) || (ev.type == 1)){
-				if(trigger_level(mlvl,ev.code) && !pipc->alrm){
-					syslog(LOG_INFO,"dbproc mouse trigger");
+				if(mlb_map.size()){
+					string ts;
+					gettimestamp(ts,false);
+					size_t pos = ts.find(':');
+					ts = ts.substr(0,pos); 
+					unsigned char hr = stoi(ts);
+					if((find(mlb_map.begin(),mlb_map.end(),hr) != mlb_map.end()) && !pipc->alrm && trigger_level(mlvlb,ev.code)){
+						syslog(LOG_INFO,"dbproc mouse trigger levelb");
+						cout << "ALARM" << endl;
+						file_write(NULL,0,TRG);
+						pipc->alrm = true;
+					}
+				}else if(trigger_level(mlvla,ev.code) && !pipc->alrm){
+					syslog(LOG_INFO,"dbproc mouse trigger levela");
 					file_write(NULL,0,TRG);
 					pipc->alrm = true;
 				}
@@ -460,10 +488,12 @@ void *dbproc(void *){
 			putText(frame,header.c_str(),Point(0,24),FONT_HERSHEY_TRIPLEX,1,Scalar(0,0,250),1);
 
 			header = "AC:";
-			if(pipc->ac)header += "ON";
-			else header += "OFF";
+			if(pipc->ac)header += "ON ";
+			else header += "OFF ";
+			header += to_string(pipc->temp)+"c";
 
 			if(pipc->voice)header += " VoiceLevel:"+to_string(pipc->voice_level);
+
 			putText(frame,header.c_str(),Point(0,475),FONT_HERSHEY_TRIPLEX,1,Scalar(0,0,250),1);
 
 			unsigned char q =  JPEG_QUALITY;
@@ -507,6 +537,7 @@ void *dbproc(void *){
 				delete prep_stmt;
 			}catch(sql::SQLException &e){
 				syslog(LOG_INFO,"dbproc failed to update image blog");
+				sighandler(12);
 			}
                 }
       		pipc->db_state = true;
@@ -627,6 +658,12 @@ void *netproc(void *){
 
 
 void *displayproc(void *){
+	ds18b20 tsens;
+	if(!tsens.en){
+		syslog(LOG_INFO,"DS18B20 Temperature sensor not found");
+		sighandler(31);
+	}
+
 	vector <unsigned char>night_map;
 	string cmd = "night";
 	access_dbase(cmd,DBSTRING);
@@ -641,7 +678,7 @@ void *displayproc(void *){
 	frame_buffer fb(photo);
 	if(fb.en == false){
 		syslog(LOG_INFO,"frame buffer failed");
-		sighandler(31);
+		sighandler(32);
 	}
         syslog(LOG_INFO,"started displayproc");
         while(!exit_displayproc){
@@ -665,7 +702,7 @@ void *displayproc(void *){
 		unique_lock<std::mutex> lock(cov_mx);
     		cov.wait(lock, []{ return cov_v == 1; });
 #ifdef DEBUG
-        	cout << "displayproc tick " << endl;
+        	cout << "displayproc tick "<< endl;
 #endif
         }
         syslog(LOG_INFO,"displayproc stopped");
@@ -712,6 +749,11 @@ void *audioproc(void *){
 	cmd = "voice_th";
 	access_dbase(cmd,DBINT);
 	unsigned int cth = stoi(cmd);
+
+	cmd = "aco";
+	access_dbase(cmd,DBINT);
+	unsigned char aco = stoi(cmd);
+
 
 	vector <unsigned char>voice_map;
 	cmd = "voice";
@@ -782,7 +824,6 @@ void *audioproc(void *){
 				afft.voice = false;
 			}
 		}
-
 		if(ac_map.size()){
 			string ts;
 			gettimestamp(ts,false);
@@ -792,6 +833,7 @@ void *audioproc(void *){
 			if(find(ac_map.begin(),ac_map.end(),hr) != ac_map.end())pipc->ac = true;
 			else pipc->ac = false;
 		}
+		if(pipc->temp <= aco)pipc->ac = false;
 
 		if(pipc->ac != ac){
 			vector <unsigned char> ac_cmd;
@@ -886,6 +928,12 @@ int main(void){
 		cout << "Loading configuration failed" << endl;
 		return 0;
 	}
+	ds18b20 tsens;
+	if(!tsens.en){
+		cout << "DS18B20 Temperature sensor not found" << endl;
+		return 0;
+	}
+
 
 #ifndef DEBUG
         pid_t process_id = 0;
@@ -980,12 +1028,15 @@ int main(void){
 #endif
 	syslog(LOG_INFO,"initialized");
 	while(!exit_main){
+		tsens.process();
+		pipc->temp = tsens.temperature;
+
 		std::this_thread::sleep_for(std::chrono::milliseconds(500));
 		std::lock_guard<std::mutex> lock(cov_mx);
 		cov_v = 1;
 		cov.notify_all();
 #ifdef DEBUG
-        	std::cout << "main tick " <<  std::endl;
+        	std::cout << "main tick " << std::endl;
 #endif
 		if(access(RUN_TIME,F_OK))creat(RUN_TIME,0666);
 	}

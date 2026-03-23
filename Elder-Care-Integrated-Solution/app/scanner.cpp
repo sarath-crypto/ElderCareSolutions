@@ -36,7 +36,7 @@ std::list<cv::Rect2d> scan(const cv::Mat& image, const int expansionStep)
             std::vector<Coord> temp;
             temp.push_back(Coord(coord -> r, coord -> c));
             
-            for(int temp_cord = 0; temp_cord < temp.size(); temp_cord++)
+            for(unsigned int temp_cord = 0; temp_cord < temp.size(); temp_cord++)
             {
                 r_min = MIN(r_min, temp[temp_cord].r);
                 c_min = MIN(c_min, temp[temp_cord].c);

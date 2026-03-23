@@ -1,1 +1,1 @@
-g++ ecsysapp.cpp -o ecsysapp  udps.o fb.o fft.o filters.o motiondetector.o scanner.o syscam.o global.o `pkg-config --cflags --libs opencv4` -lmysqlcppconn -Wno-psabi  -ldl -lm -lkissfft-float -lrtaudio -Wall -lboost_system -lboost_thread 
+g++ ecsysapp.cpp -o ecsysapp ds18b20.o udps.o fb.o fft.o filters.o motiondetector.o scanner.o syscam.o global.o `pkg-config --cflags --libs opencv4` -lmysqlcppconn -Wno-psabi  -ldl -lm -lkissfft-float -lrtaudio -Wall -lboost_system -lboost_thread -lwiringPi

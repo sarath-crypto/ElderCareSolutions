@@ -60,6 +60,7 @@ typedef struct ipc{
         int fd;
 
         unsigned char rm;
+        unsigned char temp;
         unsigned char boot;
 	unsigned char whi;
         unsigned char wl;
