@@ -1,0 +1,1 @@
+g++ solapp.cpp -o solapp global.o udps.o fft.o filters.o `pkg-config --cflags --libs libpipewire-0.3` -lfftw3 -lmovedetect `pkg-config --cflags --libs opencv4` -levent -lmysqlcppconn -lpthread -levent_pthreads -Wno-psabi  -ldl -lm -Wall -pthread -lboost_system -lboost_thread -lfmt -latomic -O0 -I../ecsysapp  -g
