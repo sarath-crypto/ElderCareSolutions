@@ -56,7 +56,6 @@
         			$akey = $row['akey'];
 				$aip = $row['aip'];
         			$aco = $row['aco'];
-        			$voice_th = $row['voice_th'];
         			$voice = $row['voice'];
         			$motion = $row['motion'];
 				$sip = $row['sip'];
@@ -111,9 +110,6 @@
 			echo '"></td></tr>';
 			echo '<tr width=100%><td bgcolor="orange">AC CUT OFF TEMPERATURE</td><td><input type="text" style="width: 250px" id="aco" name="aco" value="';
 			echo $aco;
-			echo '"></td></tr>';
-			echo '<tr width=100%><td bgcolor="gold">VOICE_THRESHOLD[>13100]</td><td><input type="number" style="width: 250px" id="voice_th" name="voice_th" value="';
-			echo $voice_th;
 			echo '"></td></tr>';
 			echo '<tr width=100%><td bgcolor="gold">VOICE DETECTION HOURS[0,1,2...23]</td><td><input type="text" style="width: 250px" id="voice" name="voice" value="';
 			echo $voice;

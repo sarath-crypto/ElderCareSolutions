@@ -22,7 +22,6 @@
 	$akey = 0;
 	$aip = 0;
 	$aco = 0;
-	$voice_th = 0;
 	$voice = 0;
 	$motion = 0;
 	$sip = 0;
@@ -55,7 +54,6 @@
 		$akey = htmlspecialchars($_POST['akey']);
 		$aip = htmlspecialchars($_POST['aip']);
 		$aco = htmlspecialchars($_POST['aco']);
-		$voice_th = htmlspecialchars($_POST['voice_th']);
 		$voice = htmlspecialchars($_POST['voice']);
 		$motion = htmlspecialchars($_POST['motion']);
 		$sip = htmlspecialchars($_POST['sip']);
@@ -93,7 +91,6 @@
 			if($akey)$sql = $sql."akey='".$akey."',";	
 			if($aip)$sql = $sql."aip='".$aip."',";	
 			if($aco)$sql = $sql."aco=".$aco.",";	
-			if($voice_th >= 0)$sql = $sql."voice_th=".$voice_th.",";	
 			if($voice)$sql = $sql."voice='".$voice."',";	
 			if($motion)$sql = $sql."motion='".$motion."',";	
 			if($sip)$sql = $sql."sip='".$sip."',";	
