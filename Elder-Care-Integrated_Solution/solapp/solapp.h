@@ -121,4 +121,37 @@ typedef struct ipc{
         bool nw_state;
 }ipc;
 
+
+class VoiceActivityDetector{
+private:
+	int sampleRate;
+	double energyThreshold;
+	double zcrThresholdMin;
+	double zcrThresholdMax;
+	double calculateRMSEnergy(const std::valarray<short>& frame){
+		double sumSquares = 0.0;
+		for(int16_t sample : frame){
+			double normalized = sample / 32768.0; 
+			sumSquares += normalized * normalized;
+		}
+		return std::sqrt(sumSquares / frame.size());
+	}
+	double calculateZeroCrossingRate(const std::valarray<short>& frame){
+		size_t crossings = 0;
+		for(size_t i = 1; i < frame.size(); ++i){
+			if ((frame[i] >= 0 && frame[i - 1] < 0) || (frame[i] < 0 && frame[i - 1] >= 0))crossings++;
+		}
+		return static_cast<double>(crossings) / frame.size();
+	}
+public:
+	VoiceActivityDetector(int rate = 8000, double energyThresh = 0.05,double zcrMin = 0.05, double zcrMax = 0.40) : sampleRate(rate), energyThreshold(energyThresh), zcrThresholdMin(zcrMin), zcrThresholdMax(zcrMax){}
+	bool isHumanVoice(const std::valarray<short> & pcmFrame){
+		double rmsEnergy = calculateRMSEnergy(pcmFrame);
+		double zcr = calculateZeroCrossingRate(pcmFrame);
+		bool hasSpeechEnergy = (rmsEnergy > energyThreshold);
+		bool hasSpeechFrequency = (zcr >= zcrThresholdMin && zcr <= zcrThresholdMax);
+		return (hasSpeechEnergy && hasSpeechFrequency);
+	}
+};
+
 #endif

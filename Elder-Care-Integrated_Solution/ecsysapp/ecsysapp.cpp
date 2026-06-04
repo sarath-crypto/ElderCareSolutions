@@ -148,6 +148,8 @@ void timer_callback(union sigval sv){
 			}
 		}
 	}
+	if(pipc->md && !pipc->alrm)pipc->alrm = true;
+	if(pipc->vd && !pipc->alrm)pipc->alrm = true;
 }
 
 bool access_dbase(string &cmd,unsigned char type){
@@ -239,7 +241,7 @@ bool load_config(void){
 	cmd = "select count(*) from cfg";
 	access_dbase(cmd,DBINT);
 	if(!stoi(cmd)){
-		cmd = "insert into cfg(mouse_levela,mouse_levelb,mouse_bhrs,mouse_name,mouse_index,beacon_timeout,dir_max,night,ac,akey,aip,aco,voice_th,voice,motion,sip,mip,wip,sn,mkey,wkey,whr,wlo,whi,access,reboot) values(0,0,'DEFAULT','DEAFULT',1,15,2,'DEFAULT','DEFAULT','ecsys_key','192.168.0.105',26,13200,'DEFAULT','DEFAULT','192.168.0.100','192.168.0.106','192.168.0.107','12345678','mkey','wkey',12,140,150,'admin',0)";
+		cmd = "insert into cfg(mouse_levela,mouse_levelb,mouse_bhrs,mouse_name,mouse_index,beacon_timeout,dir_max,night,ac,akey,aip,aco,voice,motion,sip,mip,wip,sn,mkey,wkey,whr,wlo,whi,access,reboot) values(0,0,'DEFAULT','DEAFULT',1,15,2,'DEFAULT','DEFAULT','ecsys_key','192.168.0.105',26,'DEFAULT','DEFAULT','192.168.0.100','192.168.0.106','192.168.0.107','12345678','mkey','wkey',12,140,150,'admin',0)";
 		access_dbase(cmd,DBNONE);
 	}
 	return true;

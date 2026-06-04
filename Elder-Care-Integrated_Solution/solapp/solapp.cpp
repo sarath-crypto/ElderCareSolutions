@@ -85,7 +85,7 @@
 #define CFRAME_SZ			4147789
 #define DBMAX_SZ			96
 
-#define MIC_60SEC                       120
+#define MIC_60SEC                       60
 
 #define	MUDP_PORT			8881
 #define	WUDP_PORT			8882
@@ -102,6 +102,8 @@
 #define LINUX_TIMER			1000
 
 #define MIC_SAMPLING_RATE   		8000
+#define SPK_SAMPLING_RATE   		48000
+#define VOICE_GAIN			4
 #define IR_REPEAT			4
 
 #define CAM_EN				1
@@ -147,6 +149,7 @@ void  sighandler(int num){
 }
 
 void timer_callback(union sigval sv){
+	pipc->secs++;
 #ifdef DEBUG
 	cout <<"Timer tick " <<  endl;
 #endif
@@ -283,7 +286,6 @@ bool access_dbase(string &cmd,unsigned char type){
 
 	string token = cmd;
         if(!cmd.compare("wlo"))cmd = "select wlo from cfg";
-        else if(!cmd.compare("vth"))cmd = "select voice_th from cfg";
         else if(!cmd.compare("whi"))cmd = "select whi from cfg";
 	else if(!cmd.compare("dir_max"))cmd = "select dir_max from cfg";
 	else if(!cmd.compare("sip"))cmd = "select sip from cfg";
@@ -388,7 +390,7 @@ MicrophoneStream setup_mic_stream(const std::string& mic_target,const std::strin
         uint8_t buffer[1024];
         struct spa_pod_builder b = SPA_POD_BUILDER_INIT(buffer, sizeof(buffer));
         const struct spa_pod *params[1];
-        struct spa_audio_info_raw audio_info = SPA_AUDIO_INFO_RAW_INIT(.format = SPA_AUDIO_FORMAT_S16_LE,.rate = 8000,.channels = 1);
+        struct spa_audio_info_raw audio_info = SPA_AUDIO_INFO_RAW_INIT(.format = SPA_AUDIO_FORMAT_S16_LE,.rate = MIC_SAMPLING_RATE,.channels = 1);
         params[0] = spa_format_audio_raw_build(&b, SPA_PARAM_EnumFormat,&audio_info);
         pw_stream_connect(mic.stream, PW_DIRECTION_INPUT, PW_ID_ANY,static_cast<enum pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS | PW_STREAM_FLAG_RT_PROCESS),params, 1);
         return mic;
@@ -435,7 +437,7 @@ void *netproc(void *){
         access_dbase(cmd,DBINT);
         unsigned short wlo = 0;
 	if(isuint(cmd))wlo = stoi(cmd);
-
+	
         cmd = "whi";
         access_dbase(cmd,DBINT);
         unsigned short whi = 0;
@@ -502,23 +504,21 @@ void *netproc(void *){
                         string w;
                         while (getline(ss,w,' '))word.push_back(w);
 			
-			cout << word[0].c_str() << " " <<wkey << " " <<  word[1] << endl;
                         if(!word[0].compare(wkey)){
 #ifdef  DEBUG
                                 printf("SENSOR UDP :%s\n",word[1].c_str());
 #endif
                                 wfl = stof(word[1]);
                         }
-#ifdef  DEBUG
-                        printf("Water level:%.02f\n",wfl); 
-#endif
                 }
         	time(&now);
                 if(now >= next_poll){
 			next_poll = now+POLL_TO;
                         string m_msg = mkey + " ";
                         string w_msg = wkey;
-			unsigned char hr = 0;
+			string ts;
+			gettimestamp(ts,HR);
+			unsigned char hr = stoi(ts);
 			if(whr == hr){
 				if(wfl <= wlo)mrun = true;
 				if(wfl >= whi)mrun = false;
@@ -532,6 +532,7 @@ void *netproc(void *){
                         pw->txfifo.push_back(w_msg);
                         pw->sender();
 #ifdef DEBUG
+                        printf("Whr Wlo WHi %d %d %d\n",whr,wlo,whi);
                         printf("MOTOR Send UDP----->%s \n",m_msg.c_str());
                         printf("PUMP  Send UDP----->%s \n",w_msg.c_str());
 #endif
@@ -541,7 +542,6 @@ void *netproc(void *){
 			string msg = bytes_to_hex(ps->rxq.data(),ps->rxq.size());
 			ps->rxq.clear();
 			msg += "  ";
-			cout << msg.length() << endl;
 			switch(msg.length()){
 				case(282):{
 					rd.dprod = stoi(msg.substr(252,4),nullptr,16);
@@ -647,7 +647,7 @@ void *netproc(void *){
 			}
 			cmd.clear();
 			gettimestamp(cmd,DATE_TIME);
-			cmd += " "+to_string(rd.temp)+to_string(rd.humd)+" "+to_string(rd.noise)+" "+to_string(rd.wl);
+			cmd += " "+to_string(rd.temp)+" "+to_string(rd.humd)+" "+to_string(rd.noise)+" "+to_string(rd.wl);
 			cmd += " "+to_string(rd.dprod)+" "+to_string(rd.dload);
 			cmd += " "+to_string(rd.dbuy)+" "+to_string(rd.soc)+" "+to_string(rd.uload);
 			cmd += " "+to_string(rd.gload)+" "+to_string(rd.prod)+" "+to_string(rd.gvolt);
@@ -664,6 +664,7 @@ void *netproc(void *){
 			cout << cmd.c_str() << endl;
 #endif
 			access_dbase(cmd,DBNONE);
+			sleep(1);
 			memset((void *)&rd,0,sizeof(rd));
 			struct tm *time_info = localtime(&now);
 			time_info->tm_min += (15 - (time_info->tm_min % 15));
@@ -734,8 +735,8 @@ void *aaproc(void *){
 		PW_VERSION_STREAM_EVENTS,
 		.process = on_playback
 	};
-        string ss = "alsa_input.usb-C-Media_Electronics_Inc._USB_PnP_Sound_Device-00.mono-fallback";
-	app.playback_stream = pw_stream_new_simple(pw_thread_loop_get_loop(app.thread_loop),"cpp-playback",pw_properties_new(PW_KEY_MEDIA_TYPE, "Audio", PW_KEY_MEDIA_CATEGORY, "Playback",PW_KEY_TARGET_OBJECT, ss.c_str(),NULL),&playback_events,(void *)&app);
+        string su = "alsa_input.usb-C-Media_Electronics_Inc._USB_PnP_Sound_Device-00.mono-fallback";
+	app.playback_stream = pw_stream_new_simple(pw_thread_loop_get_loop(app.thread_loop),"cpp-playback",pw_properties_new(PW_KEY_MEDIA_TYPE, "Audio", PW_KEY_MEDIA_CATEGORY, "Playback",PW_KEY_TARGET_OBJECT, su.c_str(),NULL),&playback_events,(void *)&app);
 	if(!app.playback_stream){
 		syslog(LOG_INFO,"aaproc failed to create stream");
 		pw_thread_loop_destroy(app.thread_loop);
@@ -744,7 +745,7 @@ void *aaproc(void *){
 	const struct spa_pod *playback_params[1];
 	uint8_t playback_buffer[1024];
 	struct spa_pod_builder playback_b = SPA_POD_BUILDER_INIT(playback_buffer, sizeof(playback_buffer));
-	struct spa_audio_info_raw playback_audio_info = SPA_AUDIO_INFO_RAW_INIT(.format = SPA_AUDIO_FORMAT_S16_LE,.rate = 48000,.channels = 2);
+	struct spa_audio_info_raw playback_audio_info = SPA_AUDIO_INFO_RAW_INIT(.format = SPA_AUDIO_FORMAT_S16_LE,.rate = SPK_SAMPLING_RATE,.channels = 2);
 	playback_params[0] = spa_format_audio_raw_build(&playback_b, SPA_PARAM_EnumFormat,&playback_audio_info);
 	pw_stream_connect(app.playback_stream, PW_DIRECTION_OUTPUT, PW_ID_ANY, PW_STREAM_FLAG_AUTOCONNECT, playback_params, 1);
 
@@ -753,6 +754,13 @@ void *aaproc(void *){
 	vector <unsigned char> off ={0xA8,0x20,0xA8,0x20,0xA8,0x28,0x2A,0xAA,0xAA,0xAA,0x0A,0x08,0x2A,0x82,0x08,0x28,0x20,0xA8,0x20,0x82,0x82,0x0A,0x82,0x08,0x28,0x41,0x54,0x15,0x41,0x55,0x55,0x04,0x15,0x04,0x15};
 	bool prev_ac = false;
 
+	vector <unsigned char>voice_map;
+        string cmd = "voice";
+        access_dbase(cmd,DBSTRING);
+        stringstream ss(cmd.c_str());
+        string sp;
+        while(getline(ss,sp, ','))if(isuint(sp))voice_map.push_back(stoi(sp));
+ 	VoiceActivityDetector vad(MIC_SAMPLING_RATE);
 
         syslog(LOG_INFO,"started aaproc");
         while(!exit_aaproc){
@@ -817,6 +825,19 @@ void *aaproc(void *){
 			pipc->vlvl = afft.vlvl;
 			mc.push_back(pipc->vlvl);
 			memcpy(pipc->spec,afft.spec,SPEC_SZ);
+			if(voice_map.size()){
+				string ts;
+				gettimestamp(ts,HR);
+				unsigned char hr = stoi(ts);
+				if((find(voice_map.begin(),voice_map.end(),hr) != voice_map.end()) && (pipc->am > 0.0)){
+                               		valarray<short>ain(&abuf[0],FFT_SZ);
+                               		ain *= (pipc->am*VOICE_GAIN);
+                               		if(vad.isHumanVoice(ain) && !pipc->vd){
+						pipc->vd = true;
+						syslog(LOG_INFO,"aaproc voice trigger");
+					}else pipc->vd = false;
+				}else pipc->vd = false;
+			}
 			tmr = false;
 		}
 		if(pipc->secs >= MIC_60SEC){
@@ -832,7 +853,7 @@ void *aaproc(void *){
                         cov.wait(lock, []{ return cov_v == 1; });
 #endif
 #ifdef DEBUG
-                        cout << "aaproc tick " << endl;
+                cout << "aaproc tick "<<  endl;
 #endif
                 }
         }
@@ -866,7 +887,7 @@ void *mdproc(void *){
         stringstream ss(cmd.c_str());
         string sp;
         while(getline(ss,sp, ','))if(isuint(sp))mot_map.push_back(stoi(sp));
-
+         
         vector <unsigned char>ac_map;
         cmd = "ac";
         access_dbase(cmd,DBSTRING);
@@ -952,7 +973,7 @@ void *mdproc(void *){
 				gettimestamp(ts,HR);
 				unsigned char hr = stoi(ts);
 				if((find(mot_map.begin(),mot_map.end(),hr) != mot_map.end()) && !pipc->md){
-					syslog(LOG_INFO,"dbproc motion trigger");
+					syslog(LOG_INFO,"mdproc motion trigger");
 					pipc->md = true;
 				}
 			}else pipc->md = false;
@@ -1000,7 +1021,7 @@ void *mdproc(void *){
 			else header += "OFF ";
 			header += to_string(pipc->temp/100)+"."+to_string(pipc->temp%100)+"c"+" VoiceLevel:"+to_string(pipc->vlvl);
 			putText(frame,header.c_str(),cv::Point(0,475),FONT_HERSHEY_TRIPLEX,0.7,Scalar(0,0,250),1);
-
+			
 			unsigned char v = ((float)pipc->wl/(float)whi)*100;
 			if(v  > 100)v = 100;
 			string val = "WL["+to_string(v)+"%]";
@@ -1025,6 +1046,8 @@ void *mdproc(void *){
 			catch (const std::exception& e){
 				syslog(LOG_INFO,"webproc imencode failed  exception");
 			}
+
+			lock_guard<mutex>lock(mx_db);
 			sql::PreparedStatement *prep_stmt = pipc->pcon->prepareStatement("update out_img set data=?");
 			stringstream ss(std::ios::in | std::ios::out | std::ios::binary);
 			ss.write((const char *)buf.data(),buf.size());
@@ -1161,6 +1184,7 @@ int main(void){
 	
 		ipc_in_sol_.ts = time(NULL);
 		ipc_in_sol_.md = pipc->md;
+		ipc_in_sol_.vd = pipc->vd;
 		ipc_in_sol_.bat = pipc->bl;
 		ipc_in_sol_.spwr = pipc->sl;
 		ipc_in_sol_.grid = pipc->grid;

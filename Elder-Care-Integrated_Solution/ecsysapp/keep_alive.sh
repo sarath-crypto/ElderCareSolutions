@@ -58,14 +58,21 @@ do
                 fi
                 if [ $i -eq 60 ]; then
 			ts=$(date)
-                	echo "$ts ecsysapp router offline trying to bring up wifi" >> /var/www/html/log.txt
+                	echo "$ts ecsysapp router offline trying to bring up wifi configuration one" >> /var/www/html/log.txt
 			echo "ecsys123" | sudo -S nmcli con up sarath_nivas_EXT
 			sleep 60
 			wl=$(cat /sys/class/net/wlan0/operstate)
                 	if [[ $wl == "down" ]]; then
 				ts=$(date)
-                		echo "$ts ecsysapp router offline rebooting" >> /var/www/html/log.txt
-				echo "ecsys123" | sudo -S reboot
+                		echo "$ts ecsysapp router offline trying to bring up wifi configuration two" >> /var/www/html/log.txt
+				echo "ecsys123" | sudo -S nmcli con up sarath_nivas
+				sleep 60
+				wl=$(cat /sys/class/net/wlan0/operstate)
+	                	if [[ $wl == "down" ]]; then
+					ts=$(date)
+                			echo "$ts ecsysapp router offline rebooting" >> /var/www/html/log.txt
+					echo "ecsys123" | sudo -S reboota
+				fi
 			fi
                 fi
                 sleep 1
