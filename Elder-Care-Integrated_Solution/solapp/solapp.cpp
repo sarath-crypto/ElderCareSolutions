@@ -835,7 +835,7 @@ void *aaproc(void *){
                                		if(vad.isHumanVoice(ain) && !pipc->vd){
 						pipc->vd = true;
 						syslog(LOG_INFO,"aaproc voice trigger");
-					}else pipc->vd = false;
+					}
 				}else pipc->vd = false;
 			}
 			tmr = false;
@@ -1185,6 +1185,7 @@ int main(void){
 		ipc_in_sol_.ts = time(NULL);
 		ipc_in_sol_.md = pipc->md;
 		ipc_in_sol_.vd = pipc->vd;
+		if(pipc->vd)pipc->vd = false;
 		ipc_in_sol_.bat = pipc->bl;
 		ipc_in_sol_.spwr = pipc->sl;
 		ipc_in_sol_.grid = pipc->grid;
