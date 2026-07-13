@@ -1,0 +1,1 @@
+g++ ecsysapp.cpp -o ecsysapp  udps.o fb.o global.o `pkg-config --cflags --libs libdrm` `pkg-config --cflags --libs opencv4` -lmysqlcppconn -Wno-psabi  -ldl -lm  -Wall -lboost_system -lboost_thread -O0 -g
