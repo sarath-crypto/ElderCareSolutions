@@ -1,55 +1,68 @@
-<?php
-function drawPieGraph($cachefilename, $ydata){
-        require_once ('jpgraph/jpgraph.php');
-        require_once ('jpgraph/jpgraph_pie.php');
-        $graph = new PieGraph(200,200);
-        $valid = $graph -> cache -> IsValid($cachefilename);
-        if ($valid){
-                return;
-        }else{
-                $graph -> SetupCache($cachefilename, 1);
-                $graph->clearTheme();
-                $graph->SetColor('black');
-                $graph->title->Set("Disk Usage");
-                $graph->title->SetColor('green');
-                $pie = new PiePlot($ydata);
-                $colors = array('#FF0000', '#00FF00');
-                $pie->SetSliceColors($colors);
-                $graph->Add($pie);
-                $absolutePath = (CACHE_DIR . "" . $cachefilename);
-                $graph -> Stroke($absolutePath);
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Continuous Live Image Feed</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-center;
+            background-color: #000000;
+            margin: 0;
+            padding: 1px;
         }
-}
+        .image-container {
+            margin-top: 1px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            overflow: hidden;
+            background: #fff;
+        }
+        img {
+            display: block;
+            max-width: 100%;
+            height: auto;
+            max-height: 500px;
+        }
+        .status {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    
+    <div class="image-container">
+        <!-- The source points initially to the PHP script -->
+        <img id="liveImage" src="fetch_image.php" alt="Live Stream Database Image">
+    </div>
+    
+    <div class="status" id="statusUpdate">Last updated: Just now</div>
 
-       	echo '<!DOCTYPE html><html><head><title>VIDEO IO</title>';
-       	echo '</head><body bgcolor="black">';
-	header("Refresh: 1");
-	$conn = new mysqli('localhost','userecsys','ecsys123','ecsys');
-	if ($conn->connect_error) {
-		die("Connection failed: " . $conn->connect_error);
-	}else{
-		echo '<style>
-                      table, th, td {
-                      border: 1px solid black;
-                      }
-                      th, td {
-                      background-color: #000000;
-                      }</style>';
+    <script>
+        // Set interval timing in milliseconds (e.g., 2000ms = 2 seconds)
+        const FETCH_INTERVAL = 500; 
+        const imageElement = document.getElementById('liveImage');
+        const statusElement = document.getElementById('statusUpdate');
 
-                echo '<table>';
-		echo '<tr style="height:200px;text-align: center; valign: "top;">';
-                echo '<td width="200px">';
-		$sql = "SELECT ts,data FROM out_img";	
-		$result = $conn->query($sql);
-		if ($result->num_rows > 0) {
-			while($row = $result->fetch_assoc()) {
-				echo '<div class="caption"><h3 style="color: #FFFFFF"><img src="data:image/jpeg;base64,'.base64_encode($row['data']).'"/></br>'. $row['ts']. '</h3></div>';
-			}						
-		}
-		echo '</td>';
-		echo '</tr>';
-		echo '</table>';
-		$conn->close();
-	}
-       	echo '</body></html>';
-?>
+        function updateImage() {
+            // Append a unique timestamp to force the browser to bypass its cache
+            const timestamp = new Date().getTime();
+            imageElement.src = 'fetch_image.php?t=' + timestamp;
+            
+            // Optional: Update status text on the UI
+            const now = new Date().toLocaleTimeString();
+            statusElement.textContent = 'Last updated: ' + now;
+        }
+
+        // Continuously run the update function at the specified interval
+        setInterval(updateImage, FETCH_INTERVAL);
+    </script>
+
+</body>
+</html>

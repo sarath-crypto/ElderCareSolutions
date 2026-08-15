@@ -240,6 +240,10 @@ function drawLineGraph_sensor($cachefilename,$ptemp,$phumd,$pnoise,$px){
 				$ts[] = $datetime[1];
 			}						
 		}
+		$old_value = 0;
+		$new_value =max($temp);
+		$temp = array_map(fn($item) => $item === $old_value ? $new_value : $item,$temp);
+
 		$f_solar = 'graph/solar.png';
 		$graph = drawLineGraph_solar($f_solar,$dprod,$dload,$dbuy,$soc,$uload,$gload,$prod,$gvolt,$gdexp,$gexp,$ts);
 		echo '<table><tr>';
