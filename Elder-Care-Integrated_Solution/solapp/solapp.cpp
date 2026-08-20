@@ -1,3 +1,5 @@
+#include <sys/ipc.h>
+#include <sys/shm.h>
 #include <iostream>
 #include <unistd.h>
 #include <stdio.h>
@@ -13,14 +15,12 @@
 #include <fcntl.h>
 #include <sys/time.h>
 #include <sys/stat.h>
-#include <sys/ipc.h>
 #include <sys/msg.h>
 #include <sys/param.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/mman.h>
 #include <sys/sem.h>
-#include <sys/shm.h>
 #include <sys/wait.h>
 #include <sys/types.h>
 #include <filesystem>
@@ -56,6 +56,7 @@
 #include <pipewire/pipewire.h>
 #include <spa/param/audio/format-utils.h>
 #include <regex>
+#include <semaphore.h>
 
 #include <boost/interprocess/shared_memory_object.hpp>
 #include <boost/interprocess/mapped_region.hpp>
@@ -138,7 +139,7 @@ void  sighandler(int num){
 #endif
         syslog(LOG_INFO,"sighandler is exiting %d",num);
 	if(pipc->pvideo_output)if(pipc->pvideo_output->isOpened())pipc->pvideo_output->release();
-	timer_delete(pipc->timerid);
+	timer_delete(pipc->timer_cam);
 	exit_monoproc = true;
 	exit_aaproc = true;
 	exit_netproc = true;
@@ -146,15 +147,16 @@ void  sighandler(int num){
         exit_main = true;
 }
 
-void timer_callback(union sigval sv){
+void cam_callback(union sigval sv){
 #ifdef DEBUG
-	cout <<"Timer tick " <<  endl;
+	cout <<"Timer cam tick " <<  endl;
 #endif
+	pipc->sec = true;
 	if(!pipc->md_state)return;
 #ifdef CAM_EN
 	*pipc->pusb >> pipc->frame;
 	if(pipc->frame.empty())syslog(LOG_INFO,"usb blank frame grabbed");
-	
+
 	pipc->vf.ts = time(NULL);
 	if(pipc->frame.isContinuous())memcpy(pipc->vf.buf,pipc->frame.data,VFRAME_SZ);
 	else for(int i = 0; i < pipc->frame.rows; ++i)memcpy(pipc->vf.buf + i * pipc->frame.cols * pipc->frame.elemSize(), pipc->frame.ptr<uchar>(i), pipc->frame.cols * pipc->frame.elemSize());
@@ -162,39 +164,42 @@ void timer_callback(union sigval sv){
 	pipc->vq.push_back(pipc->vf);
 	pipc->mx_vq.unlock();
 #endif
+
 	if(pipc->wq.size()){
 		pipc->mx_wq.lock();
 		memcpy((void *)&pipc->wf,(void *)&pipc->wq[0],sizeof(pipc->wf));
 		pipc->wq.erase(pipc->wq.begin());
 		pipc->mx_wq.unlock();
 		memcpy(pipc->frame.data,pipc->wf.buf,sizeof(pipc->wf.buf));
-			
-		switch(pipc->wf.cmd){
-		case(FR_INIT):{
-			string fn = FILE_WRITE;
-			gettimestamp(fn,FNTS);
-			fn = fn+"mp4";
-			pipc->pvideo_output = new VideoWriter;
-			pipc->pvideo_output->open(fn.c_str(),cv::CAP_FFMPEG,cv::VideoWriter::fourcc('h', 'e', 'v', '1'),1.0,pipc->frame.size(),true);
-                	pipc->pvideo_output->set(cv::VIDEOWRITER_PROP_QUALITY,50.0);
 
-		}
-		case(FR_RUN):{
-			if(pipc->pvideo_output->isOpened())pipc->pvideo_output->write(pipc->frame);
-			break;
-		}
-		case(FR_END):{
-			pipc->pvideo_output->release();
-			delete pipc->pvideo_output;
-			pipc->pvideo_output = NULL;
-			break;
-		}
-		case(FR_IDLE):{
-			break;
-		}
+		switch(pipc->wf.cmd){
+			case(FR_INIT):{
+					      string fn = FILE_WRITE;
+					      gettimestamp(fn,FNTS);
+					      fn = fn+"mp4";
+					      pipc->pvideo_output = new VideoWriter;
+					      pipc->pvideo_output->open(fn.c_str(),cv::CAP_FFMPEG,cv::VideoWriter::fourcc('h', 'e', 'v', '1'),1.0,pipc->frame.size(),true);
+					      pipc->pvideo_output->set(cv::VIDEOWRITER_PROP_QUALITY,50.0);
+
+				      }
+			case(FR_RUN):{
+					     if(pipc->pvideo_output->isOpened())pipc->pvideo_output->write(pipc->frame);
+					     break;
+				     }
+			case(FR_END):{
+					     pipc->pvideo_output->release();
+					     delete pipc->pvideo_output;
+					     pipc->pvideo_output = NULL;
+					     break;
+				     }
+			case(FR_IDLE):{
+					      break;
+				      }
 		}
 	}
 }
+
+
 
 static void on_capture(void *userdata){
         MicrophoneStream *mic = static_cast<MicrophoneStream*>(userdata);
@@ -283,9 +288,6 @@ bool access_dbase(string &cmd,unsigned char type){
 	}else if(!cmd.compare("maskh")){
 		cmd = "select h from mask";
 		token = "h";
-	}else if(!cmd.compare("tsout")){
-        	cmd = "select ts from out_img";
-		token = "ts";
 	}
 	sql::Statement *stmt = pipc->pcon->createStatement();
 	switch(type){
@@ -779,6 +781,33 @@ void *mdproc(void *){
 	md.thumbnail_ratio = 0.25;
 	md.line_type = cv::LINE_AA;
 
+	int sem_id = semget(SEM_KEY, 3, IPC_CREAT | 0666);
+	if(sem_id == -1){
+		syslog(LOG_INFO,"Failed to create semaphore");
+		sighandler(20);
+	}
+
+	union semun argument;
+	argument.val = 1;
+	if(semctl(sem_id, 0, SETVAL, argument) == -1) {
+		syslog(LOG_INFO,"Failed to initialize semaphore");
+		sighandler(21);
+	}
+
+	struct sembuf acquire_op = {0, -1, 0}; // Decrement by 1 (Lock)
+    	struct sembuf release_op = {0,  1, 0}; // Increment by 1 (Unlock)
+
+ 	int shmid = shmget(SHM_KEY, SHM_SIZE, IPC_CREAT | 0666);
+	if(shmid == -1) {
+		syslog(LOG_INFO,"Failed to create shared memory");
+		sighandler(22);
+	}
+	ipc_in_image *pipc_in_image = (ipc_in_image *)shmat(shmid, nullptr, 0);
+	if(pipc_in_image == (void*)-1) {
+		syslog(LOG_INFO,"Failed to attach shared memory");
+		sighandler(23);
+	}
+
         unsigned char fc = 0;
 	write_frame wf;
 	bool wr_en = false;
@@ -833,9 +862,8 @@ void *mdproc(void *){
 			s = to_string(pipc->minutes);
 			if(s.length() == 1)s = "0"+s;
 			header += s+"[";
-			if(pipc->wifi)header += "Alarm Connected";
-			else header += "Alarm Disconnected";
-			header += "][" + to_string(time(NULL)-vf.ts)+"]";
+			if(pipc->wifi)header += "Alarm Connected]";
+			else header += "Alarm Disconnected]";
 			putText(frame,header.c_str(),cv::Point(0,24),FONT_HERSHEY_SIMPLEX,0.7,Scalar(0,0,250),1);
 
 			if(md.transition_detected){
@@ -879,6 +907,7 @@ void *mdproc(void *){
 			putText(frame,val,cv::Point(0,450),FONT_HERSHEY_SIMPLEX,0.7,Scalar(0,0,250),1);
 
 			addWeighted(pipc->fmask,0.10,frame,0.90,0.0,frame);
+			
 			try{
         			if(!imencode(".jpg",frame,buf))syslog(LOG_INFO,"webproc imencode failed");
 			}
@@ -888,19 +917,14 @@ void *mdproc(void *){
 			catch (const std::exception& e){
 				syslog(LOG_INFO,"webproc imencode failed  exception");
 			}
+			
+			while(!pipc->sec);
+			pipc->sec = false;	
+			semop(sem_id, &acquire_op, 1);
+			pipc_in_image->size =  buf.size();
+			memcpy((void *)pipc_in_image->data,(void *)buf.data(),buf.size());
+			semop(sem_id, &release_op, 1);
 
-			lock_guard<mutex>lock(mx_db);
-			sql::PreparedStatement *prep_stmt = pipc->pcon->prepareStatement("update out_img set data=?");
-			stringstream ss(std::ios::in | std::ios::out | std::ios::binary);
-			ss.write((const char *)buf.data(),buf.size());
-			prep_stmt->setBlob(1, &ss);
-			try{
-				prep_stmt->executeUpdate();
-				delete prep_stmt;
-			}
-			catch(sql::SQLException &e){
-				syslog(LOG_INFO,"webproc failed to update image blog");
-			}
 			buf.clear();
 		}else{
 #ifdef TIMER_EN
@@ -913,7 +937,8 @@ void *mdproc(void *){
 #endif
 		}
         }
-        syslog(LOG_INFO,"mdproc stopped");
+        shmdt(pipc_in_image); 	 
+	syslog(LOG_INFO,"mdproc stopped");
         return NULL;
 }
 
@@ -939,7 +964,6 @@ int main(void){
 #endif
 	pipc->frame = Mat(FRAME_VGA_H,FRAME_VGA_W,CV_8UC3,Scalar(0,0,0));
 	pipc->fmask = Mat(FRAME_VGA_H,FRAME_VGA_W,CV_8UC3,Scalar(0,0,0));
-
 	openlog("",LOG_CONS | LOG_PID | LOG_NDELAY, LOG_USER);
         syslog (LOG_NOTICE, "started with uid %d", getuid ());
 
@@ -992,23 +1016,23 @@ int main(void){
 	ipc_in_sol  ipc_in_sol_;
         memset((void *)&ipc_in_sol_,0,sizeof(ipc_in_sol));
 
-	struct sigevent sev;
-	struct itimerspec its;
-	sev.sigev_notify = SIGEV_THREAD;
-	sev.sigev_notify_function = timer_callback;
-	sev.sigev_value.sival_ptr = &pipc->timerid; 
-	sev.sigev_notify_attributes = NULL;
-	if(timer_create(CLOCK_REALTIME, &sev, &pipc->timerid) == -1){
-		syslog(LOG_INFO,"timer_create failed");
+	struct sigevent sevc;
+	struct itimerspec itsc;
+	sevc.sigev_notify = SIGEV_THREAD;
+	sevc.sigev_notify_function = cam_callback;
+	sevc.sigev_value.sival_ptr = &pipc->timer_cam; 
+	sevc.sigev_notify_attributes = NULL;
+	if(timer_create(CLOCK_REALTIME, &sevc, &pipc->timer_cam) == -1){
+		syslog(LOG_INFO,"timer_createi cam failed");
 		sighandler(14);
 	}
 	long long ms = LINUX_TIMER;
-	its.it_value.tv_sec = ms / 1000;
-	its.it_value.tv_nsec = (ms % 1000) * 1000000;
-	its.it_interval.tv_sec = its.it_value.tv_sec;
-	its.it_interval.tv_nsec = its.it_value.tv_nsec;
-	if(timer_settime(pipc->timerid, 0, &its, NULL) == -1){
-		syslog(LOG_INFO,"timer_settime failed");
+	itsc.it_value.tv_sec = ms / 1000;
+	itsc.it_value.tv_nsec = (ms % 1000) * 1000000;
+	itsc.it_interval.tv_sec = itsc.it_value.tv_sec;
+	itsc.it_interval.tv_nsec = itsc.it_value.tv_nsec;
+	if(timer_settime(pipc->timer_cam, 0, &itsc, NULL) == -1){
+		syslog(LOG_INFO,"timer_settime ca,failed");
 		sighandler(15);
 	}
 
@@ -1079,7 +1103,7 @@ int main(void){
 #endif
 	if(pipc->pvideo_output)delete pipc->pvideo_output;
         if(pipc->pcon)delete pipc->pcon;
-	timer_delete(pipc->timerid);
+	timer_delete(pipc->timer_cam);
 #ifdef AUDIO_IN_EN
         pthread_join(th_aaproc_id,NULL);
 #endif

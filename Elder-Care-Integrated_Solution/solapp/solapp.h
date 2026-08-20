@@ -1,10 +1,13 @@
 #ifndef _SOLAPP_H
 #define _SOLAPP_H
 
+#include <sys/ipc.h>
+#include <sys/shm.h>
 #include <vector>
 #include <iostream>
 #include <linux/videodev2.h>
 #include <boost/asio.hpp>
+#include <semaphore.h>
 
 #include <cppconn/driver.h>
 #include <cppconn/exception.h>
@@ -23,6 +26,10 @@
 #define FRAME_VGA_H		480
 
 #define VFRAME_SZ		(FRAME_VGA_W * FRAME_VGA_H * 3)
+
+#define SHM_SIZE 		(256*1024)
+#define SHM_KEY 		0x123456
+#define SEM_KEY 		98765
 
 using namespace std;
 using namespace cv;
@@ -64,22 +71,35 @@ typedef struct rtd{
         unsigned short 	gexp;
 }rtd;
 
+union semun {
+	int val;
+	struct semid_ds *buf;
+	unsigned short *array;
+};
+
+typedef struct ipc_in_image{
+	unsigned int size;
+        unsigned char data[SHM_SIZE];
+}ipc_in_image;
+
 typedef struct ipc{
 	vector <video_frame> vq;
 	vector <write_frame> wq;
-	vector <short> ainq;
         vector <double> vlvl;
-
+	vector <short> ainq;
+	
 	mutex mx_vq;
 	mutex mx_wq;
 	mutex mx_ainq;
 	mutex mx_vlvl;
 
+ 	
         sql::Driver *pdriver;
         sql::Connection *pcon;
  	VideoWriter *pvideo_output;
     	VideoCapture *pusb;
-	timer_t timerid;
+	
+	timer_t timer_cam;
 
 	Mat fmask;
 	Mat frame;
@@ -94,6 +114,7 @@ typedef struct ipc{
         bool wifi;
 	bool md;
         bool vd;
+	bool sec;
 
         unsigned char boot;
         unsigned char bl;
