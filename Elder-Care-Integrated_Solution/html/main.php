@@ -29,7 +29,7 @@
         	echo '</head><body bgcolor="black" style="color: white;">';
 
         	echo '<h3 style="color: red;">This is a private web site, any unautherized attempt to access will be prosecuted to the maximum permitted by the law.'."[".$ip.']</h3>';
-        	echo '<iframe src="videoio.php" frameborder=no scrolling="no" width="640" height="540"></iframe>';
+        	echo '<iframe src="videoio.html" frameborder=no scrolling="no" width="640" height="540"></iframe>';
         	echo '<iframe src="disk.php" frameborder=no scrolling="no" width="640" height="540"></iframe>';
         	echo '<iframe src="management.php" frameborder=no scrolling="yes" width="150" height="540"></iframe>';
                 echo '<h4 style="color: #0000FF";>Statistics</h4>';

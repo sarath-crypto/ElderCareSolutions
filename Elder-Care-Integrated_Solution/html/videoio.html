@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Continuous Image Feed</title>
+</head>
+<body>
+
+    <!-- The visible image on your page -->
+    <img id="live-image" src="stream.jpg" alt="Live Feed" width="640">
+
+    <script>
+        const imgElement = document.getElementById('live-image');
+        const imagePath = 'get_shm.php'; // Change to your image path or endpoint
+        const updateInterval = 500;    // Milliseconds between updates (1 second)
+
+        function refreshImage() {
+            const tempImg = new Image();
+            
+            // Triggered once the new image is fully downloaded in the background
+            tempImg.onload = function() {
+                imgElement.src = tempImg.src; // Swap source cleanly with zero flicker
+            };
+
+            // Add a random or time query string to bypass cache
+            tempImg.src = imagePath + '?t=' + new Date().getTime();
+        }
+
+        // Loop the update process
+        setInterval(refreshImage, updateInterval);
+    </script>
+
+</body>
+</html>
+
