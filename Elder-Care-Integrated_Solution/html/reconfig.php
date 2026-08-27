@@ -21,7 +21,6 @@
 	$ac = 0;
 	$akey = 0;
 	$aip = 0;
-	$aco = 0;
 	$voice = 0;
 	$motion = 0;
 	$sip = 0;
