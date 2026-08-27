@@ -41,30 +41,6 @@ function drawLineGraph_solar($cachefilename,$pdprod,$pdload,$pdbuy,$psoc,$puload
 		$graph->legend->SetFillColor('navy@0.25');
 		$graph->legend->SetFont(FF_ARIAL,FS_BOLD,8);
 
-		$p1 = new LinePlot($pdprod);
-		$graph->Add($p1);
-		$p1->SetWeight(3);
-		$p1->SetFillFromYMin(false);
-		$p1->SetColor("#00FFFF");
-		$val = end($pdprod)*100;
-		$p1->SetLegend('Daily Production x100['.$val.'Wh]');
-
-		$p2 = new LinePlot($pdload);
-		$graph->Add($p2);
-		$p2->SetWeight(3);
-		$p2->SetFillFromYMin(false);
-		$p2->SetColor("#800000");
-		$val = end($pdload)*100;
-		$p2->SetLegend('Daily Load x100['.$val.'Wh]');
-
-		$p3 = new LinePlot($pdbuy);
-		$graph->Add($p3);
-		$p3->SetWeight(3);
-		$p3->SetFillFromYMin(false);
-		$p3->SetColor("#FF00FF");
-		$val = end($pdbuy)*100;
-		$p3->SetLegend('Daily Buy x100['.$val.'Wh]');
-
 		$p4 = new LinePlot($psoc);
 		$graph->Add($p4);
 		$p4->SetStyle("dashed");
@@ -79,7 +55,7 @@ function drawLineGraph_solar($cachefilename,$pdprod,$pdload,$pdbuy,$psoc,$puload
 		$p5->SetStyle("dashed");
 		$p5->SetWeight(3);
 		$p5->SetFillFromYMin(false);
-		$p5->SetColor("#00008B");
+		$p5->SetColor("#808000");
 		$val = end($puload)*10;
 		$p5->SetLegend('Load x100['.$val.'W]');
 	
@@ -88,7 +64,7 @@ function drawLineGraph_solar($cachefilename,$pdprod,$pdload,$pdbuy,$psoc,$puload
 		$p6->SetStyle("dashed");
 		$p6->SetWeight(3);
 		$p6->SetFillFromYMin(false);
-		$p6->SetColor("#800080");
+		$p6->SetColor("#ff0000");
 		$val = end($pgload)*10;
 		$p6->SetLegend('Grid Load x100['.$val.'W]');
 
@@ -106,7 +82,7 @@ function drawLineGraph_solar($cachefilename,$pdprod,$pdload,$pdbuy,$psoc,$puload
 		$p8->SetStyle("dashed");
 		$p8->SetWeight(3);
 		$p8->SetFillFromYMin(false);
-		$p8->SetColor("#ff0000");
+		$p8->SetColor("#800080");
 		$val = end($pgvolt);
 		$p8->SetLegend('Grid['.$val.'v]');
 
@@ -122,7 +98,7 @@ function drawLineGraph_solar($cachefilename,$pdprod,$pdload,$pdbuy,$psoc,$puload
 		$p10->SetStyle("dashed");
 		$p10->SetWeight(3);
 		$p10->SetFillFromYMin(false);
-		$p10->SetColor("#808000");
+		$p10->SetColor("#00008B");
 		$p10->SetLegend('Export Grid');
 
 		$graph->legend->SetFrameWeight(1);
@@ -132,7 +108,7 @@ function drawLineGraph_solar($cachefilename,$pdprod,$pdload,$pdbuy,$psoc,$puload
 	}
 }
 
-function drawLineGraph_sensor($cachefilename,$ptemp,$phumd,$pnoise,$px){
+function drawLineGraph_sensor($cachefilename,$dprod,$dload,$dbuy,$noise,$ts);
 	require_once ('jpgraph/jpgraph.php');
 	require_once ('jpgraph/jpgraph_line.php');
 	
@@ -179,32 +155,43 @@ function drawLineGraph_sensor($cachefilename,$ptemp,$phumd,$pnoise,$px){
 		foreach ($ptemp as $val){
 			$mtemp[] = ($val-$min)*($swing*10);
 		}
-		$p1 = new LinePlot($mtemp);
+
+		$p1 = new LinePlot($pdprod);
 		$graph->Add($p1);
 		$p1->SetWeight(3);
-		$p1->SetColor("#f44336");
-		$val = end($ptemp);
-		$p1->SetLegend('Temperature ['.$val.'c] [Max:'.$max.']'.'[Min:'.$min.']');
-			
+		$p1->SetFillFromYMin(false);
+		$p1->SetColor("#00FFFF");
+		$val = end($pdprod)*100;
+		$p1->SetLegend('Daily Production x100['.$val.'Wh]');
+
+		$p2 = new LinePlot($pdload);
+		$graph->Add($p2);
+		$p2->SetWeight(3);
+		$p2->SetFillFromYMin(false);
+		$p2->SetColor("#800000");
+		$val = end($pdload)*100;
+		$p2->SetLegend('Daily Load x100['.$val.'Wh]');
+
+		$p3 = new LinePlot($pdbuy);
+		$graph->Add($p3);
+		$p3->SetWeight(3);
+		$p3->SetFillFromYMin(false);
+		$p3->SetColor("#FF00FF");
+		$val = end($pdbuy)*100;
+		$p3->SetLegend('Daily Buy x100['.$val.'Wh]');
+
 		$min = min($pnoise);
 		$max = max($pnoise);
 		$swing = $max-$min;
 		foreach ($pnoise as $val){
 			$mnoise[] = ($val-$min)*($swing);
 		}
-		$p3 = new LinePlot($mnoise);
+		$p4 = new LinePlot($mnoise);
 		$graph->Add($p3);
-		$p3->SetWeight(3);
-		$p3->SetColor("#888E96");
-		$val = end($mnoise);
-		$p3->SetLegend('Sound Noise Level ['.$val.']');
-
-		$p4 = new LinePlot($phumd);
-		$graph->Add($p4);
 		$p4->SetWeight(3);
-		$p4->SetColor("#00D100");
-		$val = end($phumd);
-		$p4->SetLegend('Humidity ['.$val.']');
+		$p4->SetColor("#888E96");
+		$val = end($mnoise);
+		$p4->SetLegend('Sound Noise Level ['.$val.']');
 
 		$graph->legend->SetFrameWeight(1);
                 $absolutePath = (CACHE_DIR . "" . $cachefilename);
@@ -223,8 +210,6 @@ function drawLineGraph_sensor($cachefilename,$ptemp,$phumd,$pnoise,$px){
 		$result = $conn->query($sql);
 		if ($result->num_rows > 0) {
 			while($row = $result->fetch_assoc()) {
-				$temp[] = $row["temp"]/100; 
-				$humd[] = $row["humd"]/100; 
 				$noise[] = $row["noise"]/10; 
 				$dprod[] = $row["dprod"];
 				$dload[] = $row["dload"];
@@ -245,7 +230,7 @@ function drawLineGraph_sensor($cachefilename,$ptemp,$phumd,$pnoise,$px){
 		$temp = array_map(fn($item) => $item === $old_value ? $new_value : $item,$temp);
 
 		$f_solar = 'graph/solar.png';
-		$graph = drawLineGraph_solar($f_solar,$dprod,$dload,$dbuy,$soc,$uload,$gload,$prod,$gvolt,$gdexp,$gexp,$ts);
+		$graph = drawLineGraph_solar($f_solar,$soc,$uload,$gload,$prod,$gvolt,$gdexp,$gexp,$ts);
 		echo '<table><tr>';
 		echo '<td><img style="vertical-align: bottom;" src=';
 		echo $f_solar;
@@ -253,7 +238,7 @@ function drawLineGraph_sensor($cachefilename,$ptemp,$phumd,$pnoise,$px){
 		
 		
 		$f_sensor = 'graph/sensor.png';
-		$graph = drawLineGraph_sensor($f_sensor,$temp,$humd,$noise,$ts);
+		$graph = drawLineGraph_sensor($f_sensor,$dprod,$dload,$dbuy,$noise,$ts);
 		echo '<tr><td>';
 		echo '<img style="vertical-align: bottom;" src=';
 		echo $f_sensor;

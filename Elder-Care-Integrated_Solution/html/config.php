@@ -103,9 +103,6 @@
 			echo '<tr width=100%><td bgcolor="orange">ALARM IP</td><td><input type="text" style="width: 250px" id="aip" name="aip" value="';
 			echo $aip;
 			echo '"></td></tr>';
-			echo '<tr width=100%><td bgcolor="orange">AC CUT OFF TEMPERATURE</td><td><input type="text" style="width: 250px" id="aco" name="aco" value="';
-			echo $aco;
-			echo '"></td></tr>';
 			echo '<tr width=100%><td bgcolor="gold">VOICE DETECTION HOURS[0,1,2...23]</td><td><input type="text" style="width: 250px" id="voice" name="voice" value="';
 			echo $voice;
 			echo '"></td></tr>';

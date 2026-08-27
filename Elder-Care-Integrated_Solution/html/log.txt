@@ -1,6 +1,3 @@
-Thu 20 Aug 07:29:12 IST 2026 starting application solapp
-Thu 20 Aug 07:32:03 IST 2026 starting application solapp
-Thu 20 Aug 07:56:09 IST 2026 starting application solapp
-Thu 20 Aug 07:56:54 IST 2026 starting application solapp
-Thu 20 Aug 07:57:32 IST 2026 starting application solapp
-Thu 20 Aug 08:02:54 IST 2026 starting application solapp
+Thu 27 Aug 11:13:02 IST 2026 starting application solapp
+Thu 27 Aug 11:14:00 IST 2026 ecsysapp router offline trying to reset usb wifi dongle
+Thu 27 Aug 11:12:21 IST 2026 Solution initializing in 60 seconds...

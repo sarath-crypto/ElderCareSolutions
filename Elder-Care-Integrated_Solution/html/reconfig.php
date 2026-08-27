@@ -48,7 +48,6 @@
 		$ac = htmlspecialchars($_POST['ac']);
 		$akey = htmlspecialchars($_POST['akey']);
 		$aip = htmlspecialchars($_POST['aip']);
-		$aco = htmlspecialchars($_POST['aco']);
 		$voice = htmlspecialchars($_POST['voice']);
 		$motion = htmlspecialchars($_POST['motion']);
 		$sip = htmlspecialchars($_POST['sip']);
@@ -80,7 +79,6 @@
 			if($ac)$sql = $sql."ac='".$ac."',";	
 			if($akey)$sql = $sql."akey='".$akey."',";	
 			if($aip)$sql = $sql."aip='".$aip."',";	
-			if($aco)$sql = $sql."aco=".$aco.",";	
 			if($voice)$sql = $sql."voice='".$voice."',";	
 			if($motion)$sql = $sql."motion='".$motion."',";	
 			if($sip)$sql = $sql."sip='".$sip."',";	
