@@ -241,7 +241,8 @@ bool load_config(void){
 	cmd = "select count(*) from cfg";
 	access_dbase(cmd,DBINT);
 	if(!stoi(cmd)){
-		cmd = "insert into cfg(mouse_levela,mouse_levelb,mouse_bhrs,mouse_name,mouse_index,beacon_timeout,dir_max,night,ac,akey,aip,aco,voice,motion,sip,bip,sn,bkey,access,reboot) values(0,0,'DEFAULT','DEAFULT',1,15,2,'DEFAULT','DEFAULT','ecsys_key','192.168.0.105',26,'DEFAULT','DEFAULT','192.168.0.100','192.168.0.108','12345678','bkey','admin',0)";
+		cmd = "insert into cfg(mouse_levela,mouse_levelb,mouse_bhrs,mouse_name,mouse_index,beacon_timeout,dir_max,night,ac,akey,aip,voice,motion,sip,bip,sn,bkey,access,reboot) values(0,0,'DEFAULT','DEAFULT',1,15,2,'DEFAULT','DEFAULT','ecsys_key','192.168.0.105','DEFAULT','DEFAULT','192.168.0.100','192.168.0.108','12345678','bkey','admin',0)";
+		cout << cmd << endl;
 		access_dbase(cmd,DBNONE);
 	}
 	return true;
@@ -553,7 +554,6 @@ int main(void){
 		pipc->vd = ipc_in_sol_.vd;
 		pipc->sl = ipc_in_sol_.spwr;
 		pipc->uload = ipc_in_sol_.uload;
-		pipc->temp = ipc_in_sol_.temp;
 		memcpy(pipc->spec,ipc_in_sol_.spec,SPEC_SZ);
 	
 		this_thread::sleep_for(std::chrono::milliseconds(MAIN_TIMER));

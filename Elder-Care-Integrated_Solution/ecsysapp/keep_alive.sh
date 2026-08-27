@@ -54,7 +54,7 @@ do
 			ete=$(date +%s)
 			diff=$((ete - ets))
 			ts=$(date)
-			if [[ "$cnt" -gt 60 ]]; then
+			if [[ "$cnt" -gt 30 ]]; then
                			echo "$ts ecsysapp solapp restarting maximum count reached rebooting" >> /var/www/html/log.txt
 				echo "ecsys123" | sudo -S reboot
 			fi	
@@ -75,26 +75,21 @@ do
                 if [[ $ROUTER_STATUS == "online" ]]; then
                         break
                 fi
+
                 if [ $i -eq 60 ]; then
 			ts=$(date)
-                	echo "$ts ecsysapp router offline trying to bring up wifi configuration one" >> /var/www/html/log.txt
-			echo "ecsys123" | sudo -S nmcli con up sarath_nivas_EXT
+                	echo "$ts ecsysapp router offline trying to reset usb wifi dongle" >> /var/www/html/log.txt
+			pid=$(pgrep solapp)
+			echo "ecsys123" | sudo -S kill -9 $pid
+			echo "ecsys123" | sudo usbreset 148f:7601
 			sleep 60
 			wl=$(cat /sys/class/net/wlan0/operstate)
                 	if [[ $wl == "down" ]]; then
 				ts=$(date)
-                		echo "$ts ecsysapp router offline trying to bring up wifi configuration two" >> /var/www/html/log.txt
-				echo "ecsys123" | sudo -S nmcli con up sarath_nivas
-				sleep 60
-				wl=$(cat /sys/class/net/wlan0/operstate)
-	                	if [[ $wl == "down" ]]; then
-					ts=$(date)
-                			echo "$ts ecsysapp router offline rebooting" >> /var/www/html/log.txt
-					echo "ecsys123" | sudo -S reboot
-				fi
+                		echo "$ts ecsysapp router offline rebooting" >> /var/www/html/log.txt
+				echo "ecsys123" | sudo -S reboot
 			fi
                 fi
-                sleep 1
         done
 
 	sleep 1

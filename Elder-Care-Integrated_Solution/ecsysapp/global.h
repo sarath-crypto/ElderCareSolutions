@@ -28,7 +28,6 @@ typedef struct ipc_in_sol{
 	unsigned char vd;
 	unsigned short spwr;
 	unsigned short uload;
-	unsigned short temp;
 	unsigned short vlvl;
 	unsigned char spec[SPEC_SZ];
 

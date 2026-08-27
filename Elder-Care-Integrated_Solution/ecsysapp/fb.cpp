@@ -257,7 +257,7 @@ void frame_buffer::drawscreen(void){
         line(frame,Point(20,45),Point(780,45),Scalar(255,255,255),4,LINE_AA);
 
         val = "BAT["+to_string(pipc->bl)+"%]";
-        putText(frame,val,Point(BL_POS_X+50,40),FONT_HERSHEY_COMPLEX,0.7,Scalar(255,255,255),1);
+        putText(frame,val,Point(BL_POS_X+50,40),FONT_HERSHEY_SIMPLEX,0.7,Scalar(255,255,255),1);
         unsigned short pos = (ALL_POS_H-ALL_POS_Y)*(100-pipc->bl)*0.01+ALL_POS_Y;
         if(pipc->bl < BAT_TH){
                 if(blink)rectangle(frame,Point(BL_POS_X,pos),Point(BL_POS_W,ALL_POS_H),Scalar(0,255,0),-1,LINE_8);
@@ -267,7 +267,7 @@ void frame_buffer::drawscreen(void){
 
         unsigned short v = ((float)pipc->sl/(float)3240)*100;
         val = "SPWR["+to_string(v)+"%]";
-        putText(frame,val,Point(SL_POS_X+35,40),FONT_HERSHEY_COMPLEX,0.7,Scalar(255,255,255),1);
+        putText(frame,val,Point(SL_POS_X+35,40),FONT_HERSHEY_SIMPLEX,0.7,Scalar(255,255,255),1);
         pos = (ALL_POS_H-ALL_POS_Y)*(100-v)*0.01+ALL_POS_Y;
         if(v < SOLAR_TH){
                 if(blink)rectangle(frame,Point(SL_POS_X,pos),Point(SL_POS_W,ALL_POS_H),Scalar(0,100,0),-1,LINE_8);
@@ -276,21 +276,20 @@ void frame_buffer::drawscreen(void){
         }
 
         val = "GRID_PWR";
-        putText(frame,val,Point(GL_POS_X+35,40),FONT_HERSHEY_COMPLEX,0.7,Scalar(255,255,255),1);
+        putText(frame,val,Point(GL_POS_X+35,40),FONT_HERSHEY_SIMPLEX,0.7,Scalar(255,255,255),1);
         if(!pipc->grid){
 	       if(blink)rectangle(frame,Point(GL_POS_X,ALL_POS_Y),Point(GL_POS_W,ALL_POS_H),Scalar(0,0,255),-1,LINE_8);
 	}else rectangle(frame,Point(GL_POS_X,ALL_POS_Y),Point(GL_POS_W,ALL_POS_H),Scalar(0,0,255),-1,LINE_8);
 
         val = "UPTIME ["+to_string(pipc->ut.d)+":"+to_string(pipc->ut.h)+":"+to_string(pipc->ut.m)+"]";
-        putText(frame,val,Point(10,460),FONT_HERSHEY_COMPLEX,0.9,Scalar(0,255,0),1);
+        putText(frame,val,Point(10,460),FONT_HERSHEY_SIMPLEX,0.9,Scalar(0,255,0),1);
 
-        val = to_string(pipc->temp/100)+"c";
         if(pipc->ac){
-                     if( blink)putText(frame,val,Point(BAR_POS_X,460),FONT_HERSHEY_COMPLEX,0.9,Scalar(255,255,255),1);
-        }else putText(frame,val,Point(BAR_POS_X,460),FONT_HERSHEY_COMPLEX,0.9,Scalar(255,255,255),1);
+                     if( blink)putText(frame,"AC",Point(BAR_POS_X,460),FONT_HERSHEY_SIMPLEX,0.9,Scalar(255,255,255),1);
+        }else putText(frame,"AC",Point(BAR_POS_X,460),FONT_HERSHEY_SIMPLEX,0.9,Scalar(255,255,255),1);
 
         val = "LOAD "+to_string(pipc->uload)+"W";
-        putText(frame,val,Point(BAR_POS_X+75,460),FONT_HERSHEY_COMPLEX,0.9,Scalar(0,255,0),1);
+        putText(frame,val,Point(BAR_POS_X+75,460),FONT_HERSHEY_SIMPLEX,0.9,Scalar(0,255,0),1);
 
         if(pipc->boot){
                 if(ts != (unsigned long)time(NULL)){
@@ -300,7 +299,7 @@ void frame_buffer::drawscreen(void){
                 }
                 boot.copyTo(frame(Rect(MSG_POS_X,MSG_POS_Y,alrm.cols,alrm.rows)));
                 val = to_string(tp);
-                putText(frame,val,Point(CNT_POS_X,CNT_POS_Y),FONT_HERSHEY_COMPLEX,5,Scalar(0,0,255),10);
+                putText(frame,val,Point(CNT_POS_X,CNT_POS_Y),FONT_HERSHEY_SIMPLEX,5,Scalar(0,0,255),10);
                 display(blank);
                 return;
         }else{
@@ -308,7 +307,7 @@ void frame_buffer::drawscreen(void){
 		unsigned short pos = distance(&pipc->spec[0],max_element(&pipc->spec[0],&pipc->spec[SPEC_SZ-1]));
 		circle(frame,Point(pos+SPEC_POS_X,SPEC_POS_Y-pipc->spec[pos]),4,Scalar(0,0,255),-1,LINE_AA);
 
-                putText(frame,ct,Point(TIME_POS_X,TIME_POS_Y),FONT_HERSHEY_COMPLEX,5,Scalar(255,255,255),4);
+                putText(frame,ct,Point(TIME_POS_X,TIME_POS_Y),FONT_HERSHEY_SIMPLEX,5,Scalar(255,255,255),4);
                 if(pipc->alrm)alrm.copyTo(frame(Rect(MSG_POS_X,MSG_POS_Y,alrm.cols,alrm.rows)));
                 if(!pipc->wifi && blink)wifi.copyTo(frame(Rect(MSG_POS_X,MSG_POS_Y,wifi.cols,wifi.rows)));
                 display(blank);
