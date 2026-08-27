@@ -335,22 +335,6 @@ bool access_dbase(string &cmd,unsigned char type){
 	return true;
 }
 
-void get_env(void){
-        ifstream ifst("/sys/bus/iio/devices/iio:device0/in_temp_input");
-        if(ifst.is_open()){
-                string line;
-                getline(ifst,line);
-                if((line.length() > 4) && isuint(line))pipc->temp = stoi(line)/10;
-                ifst.close();
-        }
-        ifstream ifsh("/sys/bus/iio/devices/iio:device0/in_humidityrelative_input");
-        if(ifsh.is_open()){
-                string line;
-                getline(ifsh,line);
-                if((line.length() > 4) && isuint(line))pipc->humd = stoi(line)/10;
-                ifsh.close();
-        }
-}
 
 MicrophoneStream setup_mic_stream(const std::string& mic_target,const std::string& stream_name){
         MicrophoneStream mic;
@@ -427,8 +411,6 @@ void *netproc(void *){
 	sols sol = INIT;
 	vector<unsigned char> bytes;
 	bool prev_ac = false;
-	unsigned short temp = 0;
-	unsigned short humd = 0;
 	double am = 0.0;
 
         syslog(LOG_INFO,"started netproc");
@@ -482,23 +464,15 @@ void *netproc(void *){
 					break;
 			   	}
 				case(250):{
-				 rd.soc = stoi(msg.substr(192,4),nullptr,16);
+				 	rd.soc = stoi(msg.substr(192,4),nullptr,16);
                                         rd.uload = stoi(msg.substr(168,4),nullptr,16);
                                         rd.gload = stoi(msg.substr(132,4),nullptr,16);
                                         rd.gvolt = stoi(msg.substr(56,4),nullptr,16);
                                         rd.prod = stoi(msg.substr(200,4),nullptr,16);
 
-					if(!pipc->temp && !pipc->humd){
-						pipc->temp = temp;
-						pipc->humd = humd;
-					}
 					if(pipc->am <= 0.0)pipc->am = am;
-					temp = pipc->temp;
-					humd = pipc->humd;
 					am = pipc->am;
 
-                                        rd.temp = pipc->temp;
-                                        rd.humd = pipc->humd;
                                         rd.noise = pipc->am*100;
                                         if(rd.gvolt > 40)pipc->grid = true;
                                         else pipc->grid = false;
@@ -590,16 +564,14 @@ void *netproc(void *){
 			}
 			cmd.clear();
 			gettimestamp(cmd,DATE_TIME);
-			cmd += " "+to_string(rd.temp)+" "+to_string(rd.humd)+" "+to_string(rd.noise);
-			cmd += " "+to_string(rd.dprod)+" "+to_string(rd.dload);
+			cmd += " "+to_string(rd.noise)+" "+to_string(rd.dprod)+" "+to_string(rd.dload);
 			cmd += " "+to_string(rd.dbuy)+" "+to_string(rd.soc)+" "+to_string(rd.uload);
 			cmd += " "+to_string(rd.gload)+" "+to_string(rd.prod)+" "+to_string(rd.gvolt);
 			cmd += " "+to_string(rd.gdexp)+" "+to_string(rd.gexp);
 			file_write((char *)cmd.c_str(),cmd.length(),LOG);
 
-			cmd = "insert into hour(temp,humd,noise,dprod,dload,dbuy,soc,uload,gload,prod,gvolt,gdexp,gexp) values(";
-			cmd += to_string(rd.temp)+","+to_string(rd.humd)+","+to_string(rd.noise);
-			cmd += ","+to_string(rd.dprod)+","+to_string(rd.dload);
+			cmd = "insert into hour(noise,dprod,dload,dbuy,soc,uload,gload,prod,gvolt,gdexp,gexp) values(";
+			cmd += to_string(rd.noise)+","+to_string(rd.dprod)+","+to_string(rd.dload);
 			cmd += ","+to_string(rd.dbuy)+","+to_string(rd.soc)+","+to_string(rd.uload);
 			cmd += ","+to_string(rd.gload)+","+to_string(rd.prod)+","+to_string(rd.gvolt);
 			cmd += ","+to_string(rd.gdexp)+","+to_string(rd.gexp)+")";
@@ -890,7 +862,6 @@ void *mdproc(void *){
 			header = "AC:";
 			if(pipc->ac)header += "ON ";
 			else header += "OFF ";
-			header += to_string(pipc->temp/100)+"."+to_string(pipc->temp%100)+"c";
 			pipc->mx_vlvl.lock();
 			if(pipc->vlvl.size())header += " VoiceLevel:"+to_string(pipc->vlvl[pipc->vlvl.size()-1]);
 			pipc->mx_vlvl.unlock();
@@ -1041,7 +1012,6 @@ int main(void){
 #endif
 	syslog(LOG_INFO,"initialized");
 	while(!exit_main){
-		get_env();
 #ifdef SHARED_MEM_EN		
                 {
                         boost::interprocess::scoped_lock<named_mutex> lock(out_sol_mutex);
@@ -1061,7 +1031,6 @@ int main(void){
 		ipc_in_sol_.spwr = pipc->sl;
 		ipc_in_sol_.grid = pipc->grid;
 		ipc_in_sol_.uload = pipc->uload;
-		ipc_in_sol_.temp = pipc->temp;
 		ipc_in_sol_.vlvl = 0.0;
 		pipc->mx_vlvl.lock();
 		if(pipc->vlvl.size())ipc_in_sol_.vlvl = pipc->vlvl[pipc->vlvl.size()-1];

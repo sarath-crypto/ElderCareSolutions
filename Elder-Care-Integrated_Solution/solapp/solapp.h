@@ -56,9 +56,6 @@ typedef struct write_frame{
 
 typedef struct rtd{
         unsigned char 	soc;
-	
-	unsigned short  temp;
-	unsigned short  humd;
 	unsigned short  noise;
         unsigned short 	dprod;
         unsigned short 	dload;
