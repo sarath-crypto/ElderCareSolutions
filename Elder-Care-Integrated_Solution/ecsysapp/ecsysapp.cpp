@@ -285,13 +285,8 @@ void *netproc(void *){
 					syslog(LOG_INFO,"netproc application restart request recevied");
 				}
 			}
-
-			pc->txfifo.clear();
-			pdu p;
-			p.type = KAL;
-			p.len = HEADER_LEN+pc->key.length();
-			memcpy(p.data,pc->key.c_str(),p.len);
-			pc->txfifo.push_back(p);
+			string msg = pc->key + " alive";
+			pc->txfifo.push_back(msg);
 			if(pc->con)pc->con--;
 		}
 		pipc->wifi = pc->con;
@@ -307,11 +302,8 @@ void *netproc(void *){
 		}
 
 		if(pipc->alrm){
-			pdu p;
-			p.type = ALM;
-			p.len = HEADER_LEN+pc->key.length();
-			memcpy(p.data,pc->key.c_str(),pc->key.length());
-			pc->txfifo.push_back(p);
+			string msg = pc->key + " alarm";
+			pc->txfifo.push_back(msg);
 			pc->sender();
 	
 			pipc->alm_sync = true;

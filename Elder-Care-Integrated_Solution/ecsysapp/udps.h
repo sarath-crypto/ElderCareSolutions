@@ -38,12 +38,6 @@ using namespace std;
 enum pdu_type{KAL= 1,ALM};
 enum sm{STOP = 1,BKN};
 
-typedef struct pdu{
-	unsigned char	type;
-	unsigned char   len;
-	unsigned char 	data[PDU_MTU];
-}pdu;
-
 class udps{
 	private:
 		int sockfd;
@@ -52,12 +46,13 @@ class udps{
 		struct timeval timeout;
 		vector<string>cfg;
 		string aip;
+		bool await;
 	public:
 		string key;
 
-		vector <pdu>rxfifo;
-		vector <pdu>txfifo;
-
+		vector <string>rxfifo;
+		vector <string>txfifo;
+		
 		bool state;
 		unsigned char con;
 		udps(string);
