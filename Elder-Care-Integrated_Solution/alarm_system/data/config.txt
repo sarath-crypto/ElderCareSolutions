@@ -1,0 +1,4 @@
+ssid = myssid
+password = mypass
+key = mykey
+ip = 192.168.0.1
