@@ -391,8 +391,9 @@ void *netproc(void *){
 	cout << "Serial Number: " << sn << " " << n << endl;
 #endif
 	
-        udps *pb = new udps(bip,BUDP_PORT);
+        udps *pb = new udps(bip);
         if(!pb->state)syslog(LOG_INFO,"netproc network udps blaster failed");
+	pb->key = bkey;
 
 	tcpc *ps = nullptr;
 
@@ -416,31 +417,21 @@ void *netproc(void *){
         syslog(LOG_INFO,"started netproc");
         while(!exit_netproc){
                 pipc->nw_state = true;
-                pb->receive();
+                if(pb){
+			pb->receive();
+			pb->process();
+		}
 		if(ps)ps->receive();
 
-		if(pb->rxfifo.size()){
-                        string msg  = pb->rxfifo[0];
-			pb->rxfifo.erase(pb->rxfifo.begin());
-                        stringstream ss(msg);
-                        vector<string> word;
-                        string w;
-                        while (getline(ss,w,' '))word.push_back(w);
-                        if(!word[0].compare(bkey)){
-#ifdef  DEBUG
-                                printf("<--------------IR BLASTER UDP :%s\n",word[1].c_str());
-#endif
-                        }
-                }
         	time(&now);
                 if(now >= next_poll){
 			next_poll = now+POLL_TO;
-                        string b_msg = bkey + " ";
+                        string b_msg = bkey;
 			if(prev_ac != pipc->ac){
 				prev_ac = pipc->ac;
-				if(pipc->ac)b_msg += "ON";
-				else b_msg += "OFF";
-			}else b_msg += "IDLE";
+				if(pipc->ac)b_msg += " ON";
+				else b_msg += " OFF";
+			}else b_msg += " alive";
 			pb->txfifo.push_back(b_msg);
 			pb->sender();
 #ifdef DEBUG

@@ -19,6 +19,9 @@
 #include <arpa/inet.h>
 #include <syslog.h>
 #include <bits/stdc++.h>
+#include <iostream>
+#include <string>
+
 #include "udps.h"
 
 #define CON_TH		4
@@ -30,7 +33,7 @@ udps::~udps(){
 	close(sockfd);
 }
 
-udps::udps(string ip,unsigned short port){
+udps::udps(string ip){
 	state = true;
 	if((sockfd = socket(AF_INET,SOCK_DGRAM, 0)) < 0 ){
         	state = false;
@@ -41,7 +44,7 @@ udps::udps(string ip,unsigned short port){
 
 	seraddr.sin_family  = AF_INET;
 	seraddr.sin_addr.s_addr = INADDR_ANY;
-	seraddr.sin_port = htons(port);
+	seraddr.sin_port = htons(SERVER_PORT);
 	if(bind(sockfd, (const struct sockaddr *)&seraddr,sizeof(seraddr)) < 0 ){ 
         	state = false;
 		return;
@@ -50,8 +53,8 @@ udps::udps(string ip,unsigned short port){
 	timeout.tv_sec = 0;
         timeout.tv_usec = 10;
         setsockopt(sockfd,SOL_SOCKET,SO_RCVTIMEO,&timeout,sizeof(timeout));
-	uip  = ip;
-	uport = port;	
+	aip = ip;
+	await = false;
 }
 
 void udps::receive(void){
@@ -60,28 +63,30 @@ void udps::receive(void){
 	char buffer[BUF_LEN];
 	n = recvfrom(sockfd,(char *)buffer,BUF_LEN,MSG_WAITALL,(struct sockaddr *)&cliaddr,&len); 
 	if(n > 0){
-		string msg(buffer,n);
-		rxfifo.push_back(msg);
+		string msg(buffer,n); 
 #ifdef	DEBUG
-		printf("UDP  %s RECV->BYTES:%d Q:%lu %s\n",inet_ntop(AF_INET,&cliaddr.sin_addr,(char *)&buffer,BUF_LEN),n,rxfifo.size(),msg.c_str());
+		printf("RECV:%s\n",msg.c_str());
 #endif
+		rxfifo.push_back(msg);
 	}
 }
 
 void udps::sender(void){
 	if(txfifo.size()){
-		string msg = txfifo[0];
-		txfifo.erase(txfifo.begin());
 		cliaddr.sin_family = AF_INET;
-                cliaddr.sin_port = htons(uport);
-                inet_aton(uip.c_str(),&cliaddr.sin_addr);
-		long unsigned int n = -1;
-		n = sendto(sockfd,msg.c_str(),msg.length(),MSG_CONFIRM, (const struct sockaddr *) &cliaddr,sizeof(cliaddr)); 
-		if(n == msg.length()){
+                cliaddr.sin_port = htons(SERVER_PORT);
+                inet_aton(aip.c_str(),&cliaddr.sin_addr);
+		string msg = txfifo[0];
+		int n = -1;
+		n = sendto(sockfd,(const char *)msg.data(),msg.length(),MSG_CONFIRM, (const struct sockaddr *) &cliaddr,sizeof(cliaddr)); 
+		if(n == (int)msg.length()){
+			if(msg.find("ON") != std::string::npos)await = true;
+			if(msg.find("OFF") != std::string::npos)await = true;
+			else txfifo.erase(txfifo.begin());
 #ifdef	DEBUG
-			unsigned char buffer[BUF_LEN];
-			printf("UDP %s SEND->BYTES:%lu Q:%lu %s\n", inet_ntop(AF_INET,&cliaddr.sin_addr,(char *)&buffer,BUF_LEN),n,txfifo.size(),msg.c_str());
+			printf("SEND %s %d\n",msg.c_str(),await);
 #endif
+
 		}
 	}
 }
@@ -89,12 +94,18 @@ void udps::sender(void){
 void udps::process(void){
 	if(rxfifo.size()){
 		string msg = rxfifo[0];
+		size_t space_pos = msg.find(' ');
+    		msg = msg.substr(0,space_pos);
 		if(!msg.compare(key)){
 			con = CON_TH;
+			if(await){
+				txfifo.clear();
+				await = false;
+			}
 #ifdef	DEBUG
-			printf("udp process() msg %s con %d\n",msg.c_str(),con);
+			printf("process() msg %s con %d %d\n",msg.c_str(),con,await);
 #endif
-		}
+		}	
 		rxfifo.erase(rxfifo.begin());
 	}
 }
