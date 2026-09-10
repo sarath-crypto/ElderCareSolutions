@@ -1,0 +1,4 @@
+ssid = sarath_nivas_EXT	
+password = land1234
+key = ecsys_key
+ip = 192.168.0.104
