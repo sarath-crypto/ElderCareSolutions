@@ -34,7 +34,7 @@ WiFiUDP Udp;
 Ticker timer_sec;
 char trx[BUF_LEN];
 
-unsigned char rxp = 0;
+unsigned char rxp = 0xff;
 bool wrst = false;
 
 const char *PARAM_INPUT_1 = "input1";
