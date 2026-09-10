@@ -102,6 +102,7 @@ void play_ring(void) {
 void setup() {
   pinMode(GPIO_WLED, OUTPUT);
   pinMode(GPIO_ENBL, OUTPUT);
+  timer_sec.attach(1, reboot);
 #ifdef DEBUG
   Serial.begin(115200);
 #endif
@@ -152,7 +153,6 @@ void setup() {
 #ifdef DEBUG
   Serial.printf("STA GW IP %s MyIP %s %ddbm\n", WiFi.gatewayIP().toString().c_str(), WiFi.localIP().toString().c_str(), WiFi.RSSI());
 #endif
-  timer_sec.attach(1, reboot);
   Udp.begin((int)PORT);
   wifi_set_sleep_type(LIGHT_SLEEP_T);
   digitalWrite(GPIO_ENBL, LOW);
