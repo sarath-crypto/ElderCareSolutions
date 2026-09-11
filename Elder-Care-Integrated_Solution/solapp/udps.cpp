@@ -81,7 +81,7 @@ void udps::sender(void){
 		n = sendto(sockfd,(const char *)msg.data(),msg.length(),MSG_CONFIRM, (const struct sockaddr *) &cliaddr,sizeof(cliaddr)); 
 		if(n == (int)msg.length()){
 			if(msg.find("ON") != std::string::npos)await = true;
-			if(msg.find("OFF") != std::string::npos)await = true;
+			else if(msg.find("OFF") != std::string::npos)await = true;
 			else txfifo.erase(txfifo.begin());
 #ifdef	DEBUG
 			printf("SEND %s %d\n",msg.c_str(),await);
