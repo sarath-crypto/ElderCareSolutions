@@ -214,21 +214,20 @@ void loop() {
         rxp = 0xff;
         IPAddress rip;
         if (rip.fromString(ip)) {
-          Udp.beginPacket(rip, PORT);
-          String smsg = key + " OK";
-          Udp.write(smsg.c_str(), smsg.length());
-          bool r = Udp.endPacket();
+          for (int i = 0; i < 4; i++) {
+            Udp.beginPacket(rip, PORT);
+            String smsg = key + " OK";
+            Udp.write(smsg.c_str(), smsg.length());
+            bool r = Udp.endPacket();
 #ifdef DEBUG
-          if (r == 1) {
-            Serial.println("Packet transmitted successfully.");
-          } else {
-            Serial.println("Packet transmission failed.");
+            Serial.printf("Packet transmitted status %d\n",r);
+#endif
+            Udp.flush();
+#ifdef DEBUG
+            Serial.printf("TX %s[%s]\n", smsg.c_str(), ip.c_str());
+#endif
+            delay(100);
           }
-#endif
-          Udp.flush();
-#ifdef DEBUG
-          Serial.printf("TX %s[%s]\n", smsg.c_str(), ip.c_str());
-#endif
         }
         i = rmsg.lastIndexOf(' ');
         String cmd = rmsg.substring(i + 1);
