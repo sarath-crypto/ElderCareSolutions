@@ -1,0 +1,57 @@
+<html><head>
+<title>Elder Care System</title>
+<meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        .form-container {
+            display: grid;
+            grid-template-columns: max-content 1fr;
+            gap: 20px;
+            max-width: 400px;
+            margin: 10px auto;
+            font-family: Arial, sans-serif;
+        }
+
+        .form-container label {
+            display: flex;
+            align-items: centre;
+            font-weight: bold;
+        }
+
+        .form-container input[type="text"] {
+            width: 100%;
+            padding: 1px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+    </style>
+</head><body bgcolor=#1B7D74 style="color: white;">
+<table border="1">
+  <tr>
+    <th>Configuration</th>
+  </tr>
+  <tr>
+   <td width="500">
+	<form class="form-container" action="/reconfig" method="POST">
+        <label for="ssid">SSID:</label>
+        <input type="text" id="ssid" name="ssid" placeholder="SSID of Wifi">
+
+        <label for="pass">Password:</label>
+        <input type="text" id="pass" name="pass" placeholder="Password for Wifi">
+		
+        <label for="nkey">New IR Key:</label>
+        <input type="text" id="nkey" name="nkey" placeholder="New IR key">
+		        
+		<label for="okey">Old IR Key:</label>		
+        <input type="text" id="okey" name="okey" placeholder="Old IR key">
+
+        <label for="led">LED Off:</label>
+        <input type="text" id="led" name="led" placeholder="on/off">
+
+        <input type="submit" value="Submit">
+	</form>
+   </td>
+ </tr>
+</table>
+</body></html>
