@@ -84,13 +84,6 @@ function drawBarGraph($cachefilename, $ydata, $xdata, $height,$color,$ylegend,$x
 	echo '></img></td>';
 	echo '</tr>';
 
-	echo '<tr  style="height:50px">';
-	echo '<td width="1800 px">';
-	echo '<img style="vertical-align: bottom;"  src=';
-	echo $f_bar_uptime;
-	echo '></img></td>';
-	echo '</tr>';
-
 	echo '</table>';
 
 	echo '<form action="analytics.php" method="POST" id="action-form"></form>';
