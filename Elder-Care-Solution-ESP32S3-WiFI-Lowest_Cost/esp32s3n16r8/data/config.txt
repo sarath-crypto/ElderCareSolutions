@@ -1,0 +1,16 @@
+ssid = my_ssid
+password = my_pass
+key = my_key
+nmode = DEFAULT
+achrs = DEFAULT
+bto = 15
+screen = 5
+cona = 9447312345
+conb = 9447354321
+acon = disabled
+acoff = disabled
+mouse = low
+flip = no
+motion = 5
+rem = DEFAULT
+epoch = 1789557373

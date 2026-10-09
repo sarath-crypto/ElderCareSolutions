@@ -1,0 +1,4 @@
+ssid = my_ssid
+password = my_pass
+key = my_key
+led = on

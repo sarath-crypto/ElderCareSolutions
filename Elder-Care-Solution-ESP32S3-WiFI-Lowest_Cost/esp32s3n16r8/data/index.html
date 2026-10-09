@@ -1,0 +1,148 @@
+<html><head>
+<title>Elder Care System</title>
+<meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        .form-container {
+            display: grid;
+            grid-template-columns: max-content 1fr;
+            gap: 20px;
+            max-width: 100%;
+            margin: 10px auto;
+            font-family: Arial, sans-serif;
+        }
+
+        .form-container label {
+            display: flex;
+            align-items: centre;
+            font-weight: bold;
+        }
+
+        .form-container input[type="text"] {
+            width: 100%;
+            padding: 1px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+		table {
+			border-collapse: collapse;
+		}
+		td, th {
+			border: 1px solid #ccc;
+			padding: 4px;
+		}
+		.aligned-cell {
+		display: flex;
+			align-items: center;
+			gap: 8px;
+		}
+    </style>
+</head><body bgcolor=#1B7D74 style="color: white;">
+<table border="1" width="800">
+  <tr>
+    <th>Configurations</th>
+    <th>Views</th>
+  </tr>
+  <tr>
+   <td width="600">
+	<form class="form-container" action="/reconfig" method="POST" form id="myForm">
+        <label for="ssid">SSID:</label>
+        <input type="text" id="ssid" name="ssid" placeholder="SSID of Wifi">
+
+        <label for="pass">Password:</label>
+        <input type="text" id="pass" name="pass" placeholder="Password for Wifi">
+		
+        <label for="nkey">New Alarm Key:</label>
+        <input type="text" id="nkey" name="nkey" placeholder="New Alarm key">
+		        
+		<label for="okey">Old Alarm Key:</label>		
+        <input type="text" id="okey" name="okey" placeholder="Old Alarm key">
+
+        <label for="nmode">Night Mode:</label>
+        <input type="text" id="nmode" name="nmode" placeholder="20,21,22,23,0,1,2,3,4,5">
+
+        <label for="achr">AC Hours:</label>
+        <input type="text" id="achr" name="achrs" placeholder="11,13,15,20,22,0">
+		
+        <label for="bto">Beacon Timeout:</label>
+        <input type="text" id="bto" name="bto" placeholder="15">
+		
+		<label for="screen">Screen Refresh rate:</label>
+		<select id="screen" name="screen" required>
+		<option value="5">5 minutes</option>
+		<option value="10">10 minutes </option>
+		<option value="15">15 minutes</option>
+		</select>
+
+		<label for="cona">Contacts:</label>
+        <input type="text" id="cona" name="cona" placeholder="9447312345">
+		
+	    <label for="conb">Contacts:</label>
+        <input type="text" id="conb" name="conb" placeholder="94473954321">
+		
+		<label for="ac">AC:</label>	
+		<select id="ac" name="ac" required>
+		<option value="disabled">Disabled</option>
+		<option value="auto">Auto</option>
+		</select>
+		
+		<label for="mouse">Mouse Sensitivity:</label>
+		<select id="mouse" name="mouse" required>
+		<option value="low">Low</option>
+		<option value="high">High</option>
+		</select>
+		
+		<label for="flip">Screen Flip Vertically:</label>
+		<select id="flip" name="flip" required>
+		<option value="no">No</option>
+		<option value="yes">Yes</option>
+		</select>
+		
+		<label for="motion">Motion Detection:</label>
+		<select id="motion" name="motion" required>
+		<option value="0">0%</option>
+		<option value="1">1%</option>
+		<option value="2">2%</option>
+		<option value="3">3%</option>
+		<option value="4">4%</option>		
+		<option value="5">5%</option>
+		<option value="6">6%</option>
+		<option value="8">8%</option>
+		<option value="10">10%</option>
+		<option value="15">15%</option>
+		<option value="20">20%</option>
+		<option value="25">25%</option>
+		<option value="30">30%</option>
+		<option value="40">40%</option>
+		<option value="60">60%</option>
+		<option value="80">80%</option>
+		<option value="100">100%</option>		
+		</select>
+		 
+		<label for="rem">Reminder Hours:</label>
+        <input type="text" id="rem" name="rem" placeholder="8,9,12,13,20,21">
+		
+		<input type="hidden" id="epoch" name="epoch">
+
+        <input type="submit" value="Submit">
+	</form>
+	<script>
+        const form = document.getElementById('myForm');
+        const epochInput = document.getElementById('epoch');
+        form.addEventListener('submit', function(event) {
+            const currentEpochSeconds = Math.floor(Date.now() / 1000);
+            epochInput.value = currentEpochSeconds;
+        });
+    </script>
+    </td>
+  	<td>
+		<br><a href="events" style="color: #ffffff;">View Events</a>
+		<br><a href="camera" style="color: #ffffff;">View Web Camera</a>
+		<br><a href="storage" style="color: #ffffff;">View Storage</a>
+		<br><a href="logs" style="color: #ffffff;">View Logs</a>
+	</td>   
+ </tr>
+</table>
+</body></html>
+
