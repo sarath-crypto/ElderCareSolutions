@@ -96,13 +96,14 @@ QueueHandle_t msgQueue_web;
 QueueHandle_t msgQueue_md;
 std::vector<camera_fb_t *> mptr, wptr;
 
+
 void mouse_Callback(const EspUsbHostMouseEvent &mouseEvent) {
   if (alrm) return;
   else {
     String path = "/" + rtc.getTime("%y%m%d%H%M%S") + ".trg";
     File file = SD_MMC.open(path.c_str(), FILE_WRITE);
     if (file) file.close();
-    else esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu mouse_callback trg file creation failed\n", rtc.getLocalEpoch());
+    else esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu mouse_callback trg file creation failed\n", rtc.getEpoch());
     if (mouseEvent.buttons & 0x01) alrm = true;
     if (mouseEvent.buttons & 0x02) alrm = true;
     if (mouseEvent.buttons & 0x04) alrm = true;
@@ -234,11 +235,11 @@ void listAllFiles(fs::FS &fs, const char *dirname) {
 #endif
   File root = fs.open(dirname);
   if (!root) {
-    esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu Failed to open directory\n", rtc.getLocalEpoch());
+    esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu Failed to open directory\n", rtc.getEpoch());
     return;
   }
   if (!root.isDirectory()) {
-    esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu Not a directory\n", rtc.getLocalEpoch());
+    esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu Not a directory\n", rtc.getEpoch());
     return;
   }
   File file = root.openNextFile();
@@ -256,11 +257,11 @@ void SD_cleanup(uint8_t sz) {
   size_t freeBytes = SD_MMC.totalBytes() - SD_MMC.usedBytes();
   File root = SD_MMC.open("/");
   if (!root) {
-    esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu Failed to open directory\n", rtc.getLocalEpoch());
+    esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu Failed to open directory\n", rtc.getEpoch());
     return;
   }
   if (!root.isDirectory()) {
-    esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu Not a directory\n", rtc.getLocalEpoch());
+    esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu Not a directory\n", rtc.getEpoch());
     return;
   }
   std::vector<epfn> vepfn;
@@ -351,11 +352,11 @@ String events_handler(void) {
   }
   File root = SD_MMC.open("/");
   if (!root) {
-    esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu events_handler SD_MMC.open() failed\n", rtc.getLocalEpoch());
+    esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu events_handler SD_MMC.open() failed\n", rtc.getEpoch());
     return msg;
   }
   if (!root.isDirectory()) {
-    esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu events_handler root.isDirectory() failed\n", rtc.getLocalEpoch());
+    esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu events_handler root.isDirectory() failed\n", rtc.getEpoch());
     return msg;
   }
   File file = root.openNextFile();
@@ -552,7 +553,8 @@ void epr_Task(void *pvParameters) {
       Paint_DrawString_EN(0, 172, label.c_str(), &Font12, EPD_3IN7G_WHITE, EPD_3IN7G_BLACK);
       label = "Password:" + pass;
       Paint_DrawString_EN(0, 184, label.c_str(), &Font12, EPD_3IN7G_WHITE, EPD_3IN7G_BLACK);
-      label = "My IP Address:" + WiFi.localIP().toString();
+      if (!ap_mode) label = "My IP Address:" + WiFi.localIP().toString();
+      else label = "My IP Address:" + WiFi.softAPIP().toString();
       Paint_DrawString_EN(0, 196, label.c_str(), &Font12, EPD_3IN7G_WHITE, EPD_3IN7G_BLACK);
       label = "Alarm IP Address:" + aip;
       Paint_DrawString_EN(0, 208, label.c_str(), &Font12, EPD_3IN7G_WHITE, EPD_3IN7G_BLACK);
@@ -619,11 +621,11 @@ void epr_Task(void *pvParameters) {
         File avif = SD_MMC.open(path.c_str(), FILE_WRITE);
         if (avif) {
           if (!avi.begin(avif, FRAME_WIDTH, FRAME_HEIGHT, VIDEO_FPS, MAX_TOTAL_FRAMES)) {
-            esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu avi.begin() failed\n", rtc.getLocalEpoch());
+            esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu avi.begin() failed\n", rtc.getEpoch());
             rec = false;
           }
         } else {
-          esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu avi SD_MMC.open failed %s\n", rtc.getLocalEpoch(), path.c_str());
+          esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu avi SD_MMC.open failed %s\n", rtc.getEpoch(), path.c_str());
           rec = false;
         }
       }
@@ -674,20 +676,20 @@ void setup() {
   }
   esp_log_level_set("*", ESP_LOG_VERBOSE);
   esp_log_set_vprintf(&log_vprintf);
-  esp_log_write(ESP_LOG_INFO, "ECSYS", "%lu Booting and last reset reason %d\n", rtc.getLocalEpoch(), esp_reset_reason());
+  esp_log_write(ESP_LOG_INFO, "ECSYS", "%lu Booting and last reset reason %d\n", rtc.getEpoch(), esp_reset_reason());
 
   if (!SD_MMC.setPins(SD_MMC_CLK, SD_MMC_CMD, SD_MMC_D0)) {
 #ifdef DEBUG
     Serial.println("Pin assignment failed!");
 #endif
-    esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu SD_MMC.setPins() failed\n", rtc.getLocalEpoch());
+    esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu SD_MMC.setPins() failed\n", rtc.getEpoch());
     return;
   }
   if (!SD_MMC.begin("/sdcard", true, true)) {
 #ifdef DEBUG
     Serial.println("Card Mount/Initialization Failed");
 #endif
-    esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu Card Mount/Initialization Failed\n", rtc.getLocalEpoch());
+    esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu Card Mount/Initialization Failed\n", rtc.getEpoch());
     return;
   }
 
@@ -735,7 +737,7 @@ void setup() {
     epoch = extractValue(line);
     ifs.close();
   } else {
-    esp_log_write(ESP_LOG_INFO, "ECSYS", "%lu LittleFS.open() failed, ap mode activated\n", rtc.getLocalEpoch());
+    esp_log_write(ESP_LOG_INFO, "ECSYS", "%lu LittleFS.open() failed, ap mode activated\n", rtc.getEpoch());
     r = 255;
     ap_mode = true;
   }
@@ -764,7 +766,7 @@ void setup() {
     delay(250);
     retry++;
     if (retry >= STA_RETRY) {
-      esp_log_write(ESP_LOG_WARN, "ECSYS", "%lu WiFi connecting failed\n", rtc.getLocalEpoch());
+      esp_log_write(ESP_LOG_WARN, "ECSYS", "%lu WiFi connecting failed\n", rtc.getEpoch());
       ap_mode = true;
       break;
     }
@@ -785,15 +787,12 @@ void setup() {
     pass = "ECSYS_PASS";
     WiFi.softAP(ssid, pass);
     ntp = false;
-    time_t te = (time_t)strtoul(epoch.c_str(), NULL, 10);
-    rtc.offset = GMT_OFFSET;
-    rtc.setTime(te, 0);
 #ifdef DEBUG
     Serial.printf("AP %s %s %s\n", ssid.c_str(), pass.c_str(), WiFi.softAPIP().toString().c_str());
 #endif
-    esp_log_write(ESP_LOG_WARN, "ECSYS", "%lu ap mode activated\n", rtc.getLocalEpoch());
+    esp_log_write(ESP_LOG_WARN, "ECSYS", "%lu ap mode activated\n", rtc.getEpoch());
   } else {
-    configTime(GMT_OFFSET, 0, "0.pool.ntp.org");
+    configTime(0, 0, "0.pool.ntp.org");
     struct tm timeinfo;
     retry = 0;
     ntp = true;
@@ -817,15 +816,16 @@ void setup() {
 #endif
     }
     wrst = false;
+    time_t te = 0;
     if (ntp) {
-      time_t te = mktime(&timeinfo);
+      te = mktime(&timeinfo);
       rtc.setTime(te, 0);
     } else {
-      esp_log_write(ESP_LOG_WARN, "ECSYS", "%lu NTP not available using preconfigured time\n", rtc.getLocalEpoch());
-      time_t te = (time_t)strtoul(epoch.c_str(), NULL, 10);
-      rtc.offset = GMT_OFFSET;
-      rtc.setTime(te, 0);
+      esp_log_write(ESP_LOG_WARN, "ECSYS", "%lu NTP not available using preconfigured time\n", rtc.getEpoch());
+      te = (time_t)strtoul(epoch.c_str(), NULL, 10);
     }
+    rtc.offset = GMT_OFFSET;
+    rtc.setTime(te, 0);
   }
 
   timer_sec.attach(0.5, sec_timer);
@@ -834,7 +834,7 @@ void setup() {
 #ifdef DEBUG
     Serial.println("Error creating the queue web");
 #endif
-    esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu Q web failed\n", rtc.getLocalEpoch());
+    esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu Q web failed\n", rtc.getEpoch());
     return;
   }
   msgQueue_md = xQueueCreate(IPCQ_SZ, sizeof(camera_fb_t *));
@@ -842,7 +842,7 @@ void setup() {
 #ifdef DEBUG
     Serial.println("Error creating the queue md");
 #endif
-    esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu Q md failed\n", rtc.getLocalEpoch());
+    esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu Q md failed\n", rtc.getEpoch());
     return;
   }
 
@@ -925,7 +925,7 @@ void setup() {
 #ifdef DEBUG
     Serial.println("AC INIT");
 #endif
-    esp_log_write(ESP_LOG_INFO, "ECSYS", "%lu Entered AC ON configuraion\n", rtc.getLocalEpoch());
+    esp_log_write(ESP_LOG_INFO, "ECSYS", "%lu Entered AC ON configuraion\n", rtc.getEpoch());
     IRrecv irrecv(EXT_PWR, IR_BUF_LEN, AC_TO, true);
     irrecv.setTolerance(kTolerance);
     irrecv.enableIRIn();
@@ -944,7 +944,7 @@ void setup() {
 #ifdef DEBUG
     Serial.printf("AC ON DONE %s\n", typeToString(ir_data.decode_type, ir_data.repeat).c_str());
 #endif
-    esp_log_write(ESP_LOG_INFO, "ECSYS", "%lu Entered AC OFF configuraion\n", rtc.getLocalEpoch());
+    esp_log_write(ESP_LOG_INFO, "ECSYS", "%lu Entered AC OFF configuraion\n", rtc.getEpoch());
     while (true) {
       if (irrecv.decode(&ir_data)) {
         if (ir_data.overflow) continue;
@@ -958,7 +958,7 @@ void setup() {
 #ifdef DEBUG
     Serial.printf("AC OFF DONE %s\n", typeToString(ir_data.decode_type, ir_data.repeat).c_str());
 #endif
-    esp_log_write(ESP_LOG_INFO, "ECSYS", "%lu AC Found %s\n", rtc.getLocalEpoch(), typeToString(ir_data.decode_type, ir_data.repeat).c_str());
+    esp_log_write(ESP_LOG_INFO, "ECSYS", "%lu AC Found %s\n", rtc.getEpoch(), typeToString(ir_data.decode_type, ir_data.repeat).c_str());
     File ofs = LittleFS.open("/config.txt", "w");
     if (ofs) {
       String msg = "ssid = " + ssid + "\npassword = " + pass + "\nkey = " + key + "\nnmode = " + nmode + "\nachrs = " + achrs + "\nbto = " + bto + "\nscreen = " + scr;
@@ -1000,11 +1000,11 @@ void setup() {
   server.on("/storage", HTTP_GET, [](AsyncWebServerRequest *request) {
     File root = SD_MMC.open("/");
     if (!root) {
-      esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu Failed to open directory storage\n", rtc.getLocalEpoch());
+      esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu Failed to open directory storage\n", rtc.getEpoch());
       return;
     }
     if (!root.isDirectory()) {
-      esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu Not a directory storage\n", rtc.getLocalEpoch());
+      esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu Not a directory storage\n", rtc.getEpoch());
       return;
     }
     String html = "<html lang='en'><head><meta name='viewport' content='width=device-width, initial-scale=1'>";
@@ -1143,7 +1143,7 @@ void setup() {
 #ifdef DEBUG
     Serial.println("Camera failed");
 #endif
-    esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu init_cam() failed\n", rtc.getLocalEpoch());
+    esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu init_cam() failed\n", rtc.getEpoch());
     r = 255;
   }
   esp_log_write(ESP_LOG_INFO, "ECSYS", "%lu EcSys Operational\n");
@@ -1174,7 +1174,9 @@ void loop() {
     }
   }
   if (!conn) {
-    String ip = WiFi.localIP().toString();
+    String ip;
+    if (!ap_mode) ip = WiFi.localIP().toString();
+    else ip = WiFi.softAPIP().toString();
     int pos = ip.lastIndexOf(".");
     ip = ip.substring(0, pos + 1);
     aip = ip + String(ipi);
@@ -1226,7 +1228,7 @@ void loop() {
 #ifdef DEBUG
     Serial.printf("Web Reset\n");
 #endif
-    esp_log_write(ESP_LOG_WARN, "ECSYS", "%lu System reset via web interface\n", rtc.getLocalEpoch());
+    esp_log_write(ESP_LOG_WARN, "ECSYS", "%lu System reset via web interface\n", rtc.getEpoch());
     ESP.restart();
   }
 
@@ -1240,6 +1242,8 @@ void loop() {
     rsec = 0;
     refresh = true;
     prev_conn = conn;
+    if(conn)esp_log_write(ESP_LOG_INFO, "ECSYS", "%lu Alarm Unit Connected\n", rtc.getEpoch());
+    else esp_log_write(ESP_LOG_WARN, "ECSYS", "%lu Alarm Unit DisConnected\n", rtc.getEpoch());
   }
 
   adc = analogReadMilliVolts(ADC_BAT);
@@ -1253,7 +1257,7 @@ void loop() {
 #ifdef DEBUG
       Serial.println("AC ON");
 #endif
-      esp_log_write(ESP_LOG_INFO, "ECSYS", "%lu AC switch ON\n", rtc.getLocalEpoch());
+      esp_log_write(ESP_LOG_INFO, "ECSYS", "%lu AC switch ON\n", rtc.getEpoch());
     }
   } else {
     if (curr_ac) {
@@ -1262,7 +1266,7 @@ void loop() {
 #ifdef DEBUG
       Serial.println("AC OFF");
 #endif
-      esp_log_write(ESP_LOG_INFO, "ECSYS", "%lu AC switch OFF\n", rtc.getLocalEpoch());
+      esp_log_write(ESP_LOG_INFO, "ECSYS", "%lu AC switch OFF\n", rtc.getEpoch());
     }
   }
 
@@ -1298,7 +1302,8 @@ void loop() {
   else bl = 5;
 
 #ifdef DEBUG
-  Serial.printf("Loop[%d] EXT_PWR:%d ADC:%02f %d %s ALRM %d AC %d\n", xPortGetCoreID(), ext_pwr, s_adc, bl, rtc.getTimeDate().c_str(), alrm, curr_ac);
+  Serial.printf("Loop[%d] EXT_PWR:%d ADC:%02f BAT:%d\n", xPortGetCoreID(), ext_pwr, s_adc, bl);
+  Serial.printf("%s C:%s :%lu\n", rtc.getTimeDate().c_str(), epoch, rtc.getEpoch());
   Serial.printf("[B:%d R:%d A:%d] Free Heap: %d bytes %d\n", bsec, rsec, asec, esp_get_free_heap_size(), camera_init);
 #endif
 
@@ -1306,12 +1311,12 @@ void loop() {
 #ifdef DEBUG
     Serial.println("WiFi connection lost! Reconnecting");
 #endif
-    esp_log_write(ESP_LOG_WARN, "ECSYS", "%lu WiFi connection lost,reconnecting\n", rtc.getLocalEpoch());
+    esp_log_write(ESP_LOG_WARN, "ECSYS", "%lu WiFi connection lost,reconnecting\n", rtc.getEpoch());
     WiFi.disconnect();
     WiFi.reconnect();
   }
   if (esp_get_free_heap_size() < 10000) {
-    esp_log_write(ESP_LOG_WARN, "ECSYS", "%lu System reset due heap less than 10KB\n", rtc.getLocalEpoch());
+    esp_log_write(ESP_LOG_WARN, "ECSYS", "%lu System reset due heap less than 10KB\n", rtc.getEpoch());
     ESP.restart();
   }
   SD_cleanup(10);
