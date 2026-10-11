@@ -773,7 +773,7 @@ void setup() {
   }
   WiFi.setAutoReconnect(true);
   WiFi.setSleep(false);
-  WiFi.setTxPower(WIFI_POWER_8_5dBm);
+  WiFi.setTxPower(WIFI_POWER_15dBm);
 #ifdef DEBUG
   Serial.printf("STA GW IP %s MyIP %s %ddbm\n", WiFi.gatewayIP().toString().c_str(), WiFi.localIP().toString().c_str(), WiFi.RSSI());
 #endif
