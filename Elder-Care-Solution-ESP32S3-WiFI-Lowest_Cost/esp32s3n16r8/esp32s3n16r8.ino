@@ -777,6 +777,7 @@ void setup() {
 #ifdef DEBUG
   Serial.printf("STA GW IP %s MyIP %s %ddbm\n", WiFi.gatewayIP().toString().c_str(), WiFi.localIP().toString().c_str(), WiFi.RSSI());
 #endif
+  struct tm timeinfo;
   if (ap_mode) {
     IPAddress local_ip(10, 10, 10, 1);
     IPAddress gateway(10, 10, 10, 1);
@@ -793,7 +794,6 @@ void setup() {
     esp_log_write(ESP_LOG_WARN, "ECSYS", "%lu ap mode activated\n", rtc.getEpoch());
   } else {
     configTime(0, 0, "0.pool.ntp.org");
-    struct tm timeinfo;
     retry = 0;
     ntp = true;
     while (!getLocalTime(&timeinfo)) {
@@ -815,18 +815,14 @@ void setup() {
       Serial.printf("NTP %d\n", retry);
 #endif
     }
-    wrst = false;
-    time_t te = 0;
-    if (ntp) {
-      te = mktime(&timeinfo);
-      rtc.setTime(te, 0);
-    } else {
-      esp_log_write(ESP_LOG_WARN, "ECSYS", "%lu NTP not available using preconfigured time\n", rtc.getEpoch());
-      te = (time_t)strtoul(epoch.c_str(), NULL, 10);
-    }
-    rtc.offset = GMT_OFFSET;
-    rtc.setTime(te, 0);
   }
+  wrst = false;
+  time_t te = 0;
+  if (ntp) te = mktime(&timeinfo);
+  else te = (time_t)strtoul(epoch.c_str(), NULL, 10);
+
+  rtc.offset = GMT_OFFSET;
+  rtc.setTime(te, 0);
 
   timer_sec.attach(0.5, sec_timer);
   msgQueue_web = xQueueCreate(IPCQ_SZ, sizeof(camera_fb_t *));
@@ -1146,7 +1142,8 @@ void setup() {
     esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu init_cam() failed\n", rtc.getEpoch());
     r = 255;
   }
-  esp_log_write(ESP_LOG_INFO, "ECSYS", "%lu EcSys Operational\n");
+  if (!ntp) esp_log_write(ESP_LOG_WARN, "ECSYS", "%lu NTP not available using preconfigured time\n", rtc.getEpoch());
+  esp_log_write(ESP_LOG_INFO, "ECSYS", "%lu EcSys Operational\n", rtc.getEpoch());
 }
 
 void loop() {
@@ -1242,7 +1239,7 @@ void loop() {
     rsec = 0;
     refresh = true;
     prev_conn = conn;
-    if(conn)esp_log_write(ESP_LOG_INFO, "ECSYS", "%lu Alarm Unit Connected\n", rtc.getEpoch());
+    if (conn) esp_log_write(ESP_LOG_INFO, "ECSYS", "%lu Alarm Unit Connected\n", rtc.getEpoch());
     else esp_log_write(ESP_LOG_WARN, "ECSYS", "%lu Alarm Unit DisConnected\n", rtc.getEpoch());
   }
 
