@@ -38,6 +38,8 @@
 
 #include <vector>
 #include <algorithm>
+#include "ff.h"
+#include "vfs_fat_internal.h"
 
 //#define DEBUG 1
 
@@ -47,7 +49,7 @@ String clk, dn, motion;
 uint8_t ac_map[24];
 uint8_t nm_map[24];
 uint8_t rm_map[24];
-float adc_avg[16];
+float   adc_avg[16];
 
 uint8_t acs = AC_IDLE;
 uint8_t bl = 100;
@@ -68,6 +70,7 @@ bool camera_init = false;
 bool refresh = false;
 bool rec = false;
 
+uint8_t sd_lock = SD_IDLE;
 uint8_t asec = 0;
 uint8_t bsec = 0;
 uint16_t adc = 0;
@@ -113,9 +116,6 @@ void mouse_Callback(const EspUsbHostMouseEvent &mouseEvent) {
 }
 
 void sec_timer(void) {
-#ifdef DEBUG
-  uint32_t startTime = millis();
-#endif
   if (alrm) asec++;
   if (asec >= ALARM_TO) {
     alrm = false;
@@ -132,10 +132,31 @@ void sec_timer(void) {
       if (xQueueSend(msgQueue_md, &fb, pdMS_TO_TICKS(10)) != pdPASS) esp_camera_fb_return(fb);
     }
   }
-#ifdef DEBUG
-  uint32_t executionTime = millis() - startTime;
-  Serial.printf("Ticks (~40) %d ms %d\n", executionTime, (fb) ? fb->len : 0);
-#endif
+}
+
+String SDformat_handler(void) {
+  sd_lock = SD_LOCK;
+ 
+  String msg;
+  char logical_drive[3] = { '0', ':', 0 };
+  MKFS_PARM opt = {
+    .fmt = FM_ANY,  // Formats as FAT/FAT32 depending on card size
+    .n_fat = 2,     // Number of FAT copies
+    .align = 0,     // Data area alignment
+    .n_root = 0,    // Number of root directory entries (0 for FAT32)
+    .au_size = 0    // Allocation unit size (0 forces default cluster size)
+  };
+  FRESULT res = f_mkfs(logical_drive, &opt, trx, 4096);
+  if (res != FR_OK) {
+    esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu Error: formatSDMMC() Format failed with FatFs error code: %d\n", rtc.getEpoch(), res);
+    msg = "SDformat_handler() Failed to allocate memory for format buffer " + String(res);
+    sd_lock = SD_IDLE;
+    return msg;
+  }
+  esp_log_write(ESP_LOG_INFO, "ECSYS", "%lu formatSDMMC() SD Card formatted successfully\n", rtc.getEpoch());
+  msg = "SDformat_handler() SD Card formatted successfully";
+  sd_lock = SD_IDLE;
+  return msg;
 }
 
 void rotateLogFile() {
@@ -248,13 +269,12 @@ void listAllFiles(fs::FS &fs, const char *dirname) {
     Serial.printf("%s %d Bytes\n", file.name(), file.size());
 #endif
     String fn(file.name());
-    if (fn.endsWith(".avi") && !file.size()) SD_MMC.remove((String("/") + String(file.name())).c_str());
     file = root.openNextFile();
   }
 }
 
 void SD_cleanup(uint8_t sz) {
-  size_t freeBytes = SD_MMC.totalBytes() - SD_MMC.usedBytes();
+  size_t freeBytes = (SD_MMC.totalBytes() - SD_MMC.usedBytes()) / (1024 * 1024);
   File root = SD_MMC.open("/");
   if (!root) {
     esp_log_write(ESP_LOG_ERROR, "ECSYS", "%lu Failed to open directory\n", rtc.getEpoch());
@@ -285,10 +305,11 @@ void SD_cleanup(uint8_t sz) {
     return a.epoch < b.epoch;
   });
 
-  while (freeBytes < (sz * 1000000)) {
+  while (freeBytes < sz) {
     String fn = "/" + vepfn[0].fn;
     SD_MMC.remove(fn.c_str());
-    freeBytes = SD_MMC.totalBytes() - SD_MMC.usedBytes();
+    esp_log_write(ESP_LOG_WARN, "ECSYS", "%lu SD_cleanup() erased \n", rtc.getEpoch(), fn.c_str());
+    freeBytes = (SD_MMC.totalBytes() - SD_MMC.usedBytes()) / (1024 * 1024);
   }
 }
 
@@ -342,6 +363,7 @@ String index_handler(void) {
 void add_events(String &msg, String label, uint8_t val) {
   msg += "<div class = \"bar-wrapper\"><div class = \"bar\" style = \"height: " + String(val) + "%;\"><span class = \" label \"> " + label + "</span></div></div>\n";
 }
+
 
 String events_handler(void) {
   String msg;
@@ -640,10 +662,12 @@ void epr_Task(void *pvParameters) {
       }
     }
 #ifdef DEBUG
+/*
     UBaseType_t remainingSpace = uxTaskGetStackHighWaterMark(NULL);
     unsigned int stackSizeAllocated = 3000;
     unsigned int maxUsedSoFar = stackSizeAllocated - remainingSpace;
     printf("Task epr Stack: Max Used = %u bytes, Remaining Free = %u bytes core %d\n", maxUsedSoFar, (unsigned int)remainingSpace, xPortGetCoreID());
+*/
 #endif
     vTaskDelay(pdMS_TO_TICKS(500));
   }
@@ -665,6 +689,7 @@ void setup() {
   delay(1000);
 
   if (!LittleFS.begin(true)) ap_mode = true;
+  //LittleFS.remove("/log.txt");
 
   logMutex = xSemaphoreCreateMutex();
   logFile = LittleFS.open(LOG_FILE_PATH, "a");
@@ -970,6 +995,10 @@ void setup() {
   acs = AC_IDLE;
   refresh = true;
 
+  server.on("/format", HTTP_GET, [](AsyncWebServerRequest *request) {
+    request->send(200, "text/html", SDformat_handler());
+  });
+
   server.on("/events", HTTP_GET, [](AsyncWebServerRequest *request) {
     request->send(200, "text/html", events_handler());
   });
@@ -1152,10 +1181,14 @@ void loop() {
 
   int pktsz = Udp.parsePacket();
   if (pktsz) {
-    int n = Udp.read(trx, BUF_LEN);
-    String rmsg = String(trx).substring(0, n);
+    int n = 0;
+    String rmsg;
+    if(sd_lock == SD_IDLE){
+      n = Udp.read(trx, BUF_LEN);
+      rmsg = String(trx).substring(0, n);
+    }
 #ifdef DEBUG
-    Serial.printf("RX msg %s\n", rmsg.c_str());
+    //Serial.printf("RX msg %s\n", rmsg.c_str());
 #endif
     int i = rmsg.indexOf(' ');
     String rkey = rmsg.substring(0, i);
@@ -1217,7 +1250,7 @@ void loop() {
       bool r = Udp.endPacket();
       Udp.flush();
 #ifdef DEBUG
-      Serial.printf("TX %s[%s] %d\n", smsg.c_str(), aip.c_str(), r);
+      //Serial.printf("TX %s[%s] %d\n", smsg.c_str(), aip.c_str(), r);
 #endif
     }
   }
@@ -1299,9 +1332,11 @@ void loop() {
   else bl = 5;
 
 #ifdef DEBUG
+/*
   Serial.printf("Loop[%d] EXT_PWR:%d ADC:%02f BAT:%d\n", xPortGetCoreID(), ext_pwr, s_adc, bl);
   Serial.printf("%s C:%s :%lu\n", rtc.getTimeDate().c_str(), epoch, rtc.getEpoch());
   Serial.printf("[B:%d R:%d A:%d] Free Heap: %d bytes %d\n", bsec, rsec, asec, esp_get_free_heap_size(), camera_init);
+*/
 #endif
 
   if ((WiFi.status() != WL_CONNECTED) && !ap_mode) {
