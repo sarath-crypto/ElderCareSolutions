@@ -49,7 +49,7 @@ String clk, dn, motion;
 uint8_t ac_map[24];
 uint8_t nm_map[24];
 uint8_t rm_map[24];
-float   adc_avg[16];
+float adc_avg[16];
 
 uint8_t acs = AC_IDLE;
 uint8_t bl = 100;
@@ -136,7 +136,7 @@ void sec_timer(void) {
 
 String SDformat_handler(void) {
   sd_lock = SD_LOCK;
- 
+
   String msg;
   char logical_drive[3] = { '0', ':', 0 };
   MKFS_PARM opt = {
@@ -289,7 +289,6 @@ void SD_cleanup(uint8_t sz) {
   while (file) {
     epfn tdata;
     tdata.fn = String(file.name());
-    ;
     tmElements_t ts;
     ts.Year = 2000 + tdata.fn.substring(0, 2).toInt() - 1970;
     ts.Month = tdata.fn.substring(2, 4).toInt();
@@ -348,6 +347,7 @@ String process_ac(void) {
   String cmd = base64::encode((uint8_t *)du16.data(), du16.size() * 2);
   return cmd;
 }
+
 
 
 String index_handler(void) {
@@ -523,7 +523,8 @@ void epr_Task(void *pvParameters) {
 #ifdef DEBUG
       Serial.println("Refresh");
 #endif
-      uint16_t days = (millis() / (1000 * 60 * 60) % 24) / 24;
+      uint8_t hrs = millis() / (1000 * 60 * 60);
+      uint16_t days = hrs / 24;
 
       EPD_3IN7G_Init_Fast();
       Paint_NewImage(Image, EPD_3IN7G_WIDTH, EPD_3IN7G_HEIGHT, angle, EPD_3IN7G_WHITE);
@@ -581,7 +582,7 @@ void epr_Task(void *pvParameters) {
       label = "Alarm IP Address:" + aip;
       Paint_DrawString_EN(0, 208, label.c_str(), &Font12, EPD_3IN7G_WHITE, EPD_3IN7G_BLACK);
 
-      label = "UpTime[" + String(days) + "]Days";
+      label = "UpTime[" + String(days) +":"+String(hrs)+ "]";
       Paint_DrawString_EN(0, 220, label.c_str(), &Font20, EPD_3IN7G_WHITE, EPD_3IN7G_RED);
       if (ext_pwr) label = "POWER";
       else label = "BAT:" + String((int)bl) + "%";
@@ -1011,6 +1012,15 @@ void setup() {
     }
   });
 
+  server.on("/clearlogs", HTTP_GET, [](AsyncWebServerRequest *request) {
+    if (LittleFS.exists("/log.txt")) {
+      rotateLogFile();
+      request->send(200, "text/plain", "Log file deleted");
+    } else {
+      request->send(404, "text/plain", "File not found");
+    }
+  });
+
   server.on("/download", HTTP_GET, [](AsyncWebServerRequest *request) {
     if (request->hasParam("file")) {
       String filepath = "/" + request->getParam("file")->value();
@@ -1095,6 +1105,7 @@ void setup() {
         ofs.close();
       }
       wrst = true;
+      esp_log_write(ESP_LOG_WARN, "ECSYS", "%lu Configuration updated successfully and system is rebooting now...\n", rtc.getEpoch());
       request->send(200, "text/plain", "Configuration updated successfully and system is rebooting now...");
     } else {
       request->send(200, "text/plain", "Incorrect key Re-Configuration failed.");
@@ -1183,7 +1194,7 @@ void loop() {
   if (pktsz) {
     int n = 0;
     String rmsg;
-    if(sd_lock == SD_IDLE){
+    if (sd_lock == SD_IDLE) {
       n = Udp.read(trx, BUF_LEN);
       rmsg = String(trx).substring(0, n);
     }
@@ -1343,7 +1354,6 @@ void loop() {
 #ifdef DEBUG
     Serial.println("WiFi connection lost! Reconnecting");
 #endif
-    esp_log_write(ESP_LOG_WARN, "ECSYS", "%lu WiFi connection lost,reconnecting\n", rtc.getEpoch());
     WiFi.disconnect();
     WiFi.reconnect();
   }
