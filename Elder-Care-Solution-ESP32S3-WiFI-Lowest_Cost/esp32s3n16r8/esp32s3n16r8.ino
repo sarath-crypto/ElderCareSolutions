@@ -525,8 +525,8 @@ void epr_Task(void *pvParameters) {
 #endif
       uint8_t hrs = millis() / (1000 * 60 * 60);
       uint16_t days = hrs / 24;
-      hrs = hrs % 24;
-
+      if(hrs >= 24)hrs = hrs % 24;
+      
       EPD_3IN7G_Init_Fast();
       Paint_NewImage(Image, EPD_3IN7G_WIDTH, EPD_3IN7G_HEIGHT, angle, EPD_3IN7G_WHITE);
       Paint_SetScale(4);
